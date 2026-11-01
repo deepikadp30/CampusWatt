@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CampusGrid — Energy Load Forecasting & Peak Reduction</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+/* SAFETY NET 1: global error trap. If the main script throws before it
+   finishes booting, paint a visible error card into #page instead of
+   leaving it blank. Only active until __CG_BOOTED is set. */
+(function(){
+  function show(msg){
+    if(window.__CG_BOOTED)return;
+    var p=document.getElementById('page');if(!p||p.dataset.bootErr)return;
+    p.dataset.bootErr='1';
+    var card=document.createElement('div');card.className='card';card.style.marginTop='30px';
+    var inner=document.createElement('div');inner.className='empty';
+    inner.innerHTML='<b style="color:var(--danger)">Application failed to start</b>';
+    var m=document.createElement('div');
+    m.style.cssText='font-family:monospace;font-size:12px;margin:8px 0;color:var(--muted);word-break:break-word';
+    m.textContent=String(msg||'Unknown error');
+    var btn=document.createElement('button');btn.className='btn primary';btn.style.marginTop='12px';
+    btn.textContent='Reset data & reload';
+    btn.onclick=function(){try{localStorage.removeItem('campusgrid.db.v3')}catch(e){}location.reload()};
+    inner.appendChild(m);inner.appendChild(btn);card.appendChild(inner);p.appendChild(card);
+  }
+  window.addEventListener('error',function(e){
+    show((e&&e.message?e.message:'Script error')+(e&&e.lineno?' (line '+e.lineno+')':''));
+  });
+  window.__cgBootFail=show;
+})();
+</script>
+<style>
+:root{
+  --bg:#f3f2ec; --surface:#fdfdfb; --surface2:#ecebe2; --ink:#1a2420; --muted:#69735f;
+  --line:#e0dfd4; --line2:#cfcebf; --primary:#0e6b4f; --primary-soft:#e2efe7; --on-primary:#fff;
+  --accent:#c47b1a; --accent-soft:#f7ecdb; --danger:#b23a2f; --danger-soft:#f7e3e0; --teal:#0e7490;
+  --side:#10201a; --side-ink:#c9dbd0; --side-mut:#7d958a;
+  --c1:#0e6b4f; --c2:#0e7490; --c3:#c47b1a; --c4:#a8432f; --c5:#5b6b7c; --c6:#5c7a2e;
+  --shadow:0 1px 2px rgba(20,30,25,.06),0 4px 16px rgba(20,30,25,.06);
+}
+html[data-theme="dark"]{
+  --bg:#0d1411; --surface:#141d18; --surface2:#1a2620; --ink:#e7ece7; --muted:#8fa096;
+  --line:#243129; --line2:#31453a; --primary:#31a37e; --primary-soft:#183127; --on-primary:#06130d;
+  --accent:#e0a13f; --accent-soft:#33281c; --danger:#e0705c; --danger-soft:#37201c; --teal:#3aa7bd;
+  --c1:#31a37e; --c2:#3aa7bd; --c3:#e0a13f; --c4:#e0705c; --c5:#8fa2b5; --c6:#93b55a;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 18px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5}
+h1,h2,h3{font-family:'Space Grotesk',sans-serif}
+.mono{font-family:'IBM Plex Mono',monospace}
+a{color:var(--primary);text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--ink);background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:8px 10px;width:100%;outline:none;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent)}
+label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:.02em}
+html[data-motion="off"] *{transition:none!important;animation:none!important}
+.app{display:flex;min-height:100vh}
+/* sidebar */
+.sidebar{width:238px;flex-shrink:0;background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;transition:width .22s ease;z-index:40}
+.brand{display:flex;align-items:center;gap:11px;padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+.brand-mark{width:36px;height:36px;border-radius:9px;background:#0e6b4f;display:grid;place-items:center;flex-shrink:0;border:1px solid #2c4a3d}
+.brand-name{font-family:'Space Grotesk';font-size:16.5px;font-weight:700;color:#fff;white-space:nowrap}
+.brand-sub{font-size:10.5px;color:var(--side-mut);white-space:nowrap;line-height:1.3}
+.side-nav{padding:12px 10px;display:flex;flex-direction:column;gap:2px;flex:1;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:11px;padding:9.5px 11px;border-radius:8px;color:var(--side-ink);font-size:13.5px;font-weight:500;position:relative;border:none;background:none;text-align:left;width:100%;transition:background .15s}
+.nav-item:hover{background:rgba(255,255,255,.06)}
+.nav-item.active{background:rgba(58,183,138,.16);color:#fff}
+.nav-item.active::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:3px;border-radius:3px;background:#3ab78a}
+.nav-item svg{flex-shrink:0}
+.nav-label{white-space:nowrap}
+.side-foot{padding:12px 14px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:9px}
+.data-chip{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--side-mut);white-space:nowrap;overflow:hidden}
+.data-chip .dot{width:7px;height:7px;border-radius:50%;background:#3ab78a;flex-shrink:0}
+.collapse-btn{background:none;border:1px solid rgba(255,255,255,.12);color:var(--side-ink);border-radius:7px;padding:6px;display:flex;align-items:center;justify-content:center}
+.collapse-btn svg{transition:transform .22s}
+.app.collapsed .sidebar{width:66px}
+.app.collapsed .brand-name,.app.collapsed .brand-sub,.app.collapsed .nav-label,.app.collapsed .data-chip span{display:none}
+.app.collapsed .nav-item{justify-content:center;padding:10px}
+.app.collapsed .collapse-btn svg{transform:rotate(180deg)}
+.scrim{display:none}
+/* topbar */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:58px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 20px;position:sticky;top:0;z-index:30}
+.icon-btn{background:none;border:1px solid transparent;border-radius:8px;width:34px;height:34px;display:grid;place-items:center;color:var(--muted);position:relative}
+.icon-btn:hover{background:var(--surface2);color:var(--ink)}
+.badge-dot{position:absolute;top:5px;right:5px;min-width:15px;height:15px;border-radius:8px;background:var(--danger);color:#fff;font-size:9.5px;font-weight:600;display:grid;place-items:center;padding:0 3px}
+.crumbs{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);min-width:0}
+.crumbs b{color:var(--ink);font-weight:600;white-space:nowrap}
+.searchbox{position:relative;flex:1;max-width:420px;margin-left:auto}
+.searchbox input{padding:7.5px 12px 7.5px 34px;border-radius:9px;background:var(--bg)}
+.searchbox>svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.search-drop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);display:none;max-height:320px;overflow-y:auto;z-index:60}
+.search-drop.open{display:block}
+.sr-item{display:flex;align-items:center;gap:10px;padding:9px 13px;font-size:13px;cursor:pointer}
+.sr-item:hover{background:var(--surface2)}
+.sr-item .kind{margin-left:auto;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.tb-right{display:flex;align-items:center;gap:6px}
+.dd{position:relative}
+.dd-menu{position:absolute;right:0;top:calc(100% + 8px);background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);min-width:250px;display:none;z-index:60;overflow:hidden}
+.dd.open .dd-menu{display:block}
+.dd-head{padding:11px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dd-item{display:flex;align-items:center;gap:10px;padding:9.5px 14px;font-size:13px;cursor:pointer;border:none;background:none;width:100%;text-align:left;color:var(--ink)}
+.dd-item:hover{background:var(--surface2)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-size:12px;font-weight:600;font-family:'Space Grotesk';border:none}
+.meta b{font-size:13px}.meta span{font-size:11.5px;color:var(--muted);display:block}
+/* page scaffold */
+#page{padding:24px 26px 60px;max-width:1280px;width:100%;margin:0 auto;flex:1}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+.page-head h1{font-size:23px;font-weight:700;letter-spacing:-.01em}
+.page-head .sub{color:var(--muted);font-size:13px;margin-top:3px;max-width:680px}
+.head-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 17px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.card-h h3{font-size:14.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card-h .hint{font-size:11.5px;color:var(--muted);font-weight:400}
+.card-b{padding:16px 17px}
+.grid{display:grid;gap:16px}
+.seg{display:inline-flex;background:var(--surface2);border-radius:9px;padding:3px;gap:2px}
+.seg button{border:none;background:none;padding:5.5px 12px;border-radius:7px;font-size:12.5px;font-weight:500;color:var(--muted)}
+.seg button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1);font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:13px;font-weight:500;transition:background .15s}
+.btn:hover{background:var(--surface2)}
+.btn.primary{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{background:var(--danger);color:#fff;border-color:var(--danger)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--primary)}
+.btn.ghost:hover{background:var(--primary-soft)}
+.btn.sm{padding:5px 10px;font-size:12px;border-radius:7px}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2.5px 9px;border-radius:20px;letter-spacing:.02em}
+.chip.ok{background:var(--primary-soft);color:var(--primary)}
+.chip.warn{background:var(--accent-soft);color:var(--accent)}
+.chip.err{background:var(--danger-soft);color:var(--danger)}
+.chip.mut{background:var(--surface2);color:var(--muted)}
+.chip.info{background:color-mix(in srgb,var(--teal) 14%,transparent);color:var(--teal)}
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr)}
+.kpi{padding:16px 18px;border-left:1px solid var(--line)}
+.kpi:first-child{border-left:none}
+.kpi .k-label{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:6px}
+.kpi .k-val{font-family:'Space Grotesk';font-size:24px;font-weight:700;margin-top:5px;letter-spacing:-.01em}
+.kpi .k-val small{font-size:13px;color:var(--muted);font-weight:500;margin-left:3px}
+.kpi .k-sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+.k-sub .up{color:var(--primary);font-weight:600}.k-sub .down{color:var(--danger);font-weight:600}
+/* tables */
+.tbl-wrap{overflow-x:auto}
+table.tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
+.tbl th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap;user-select:none}
+.tbl th.sortable{cursor:pointer}.tbl th.sortable:hover{color:var(--ink)}
+.tbl th.sort-asc::after{content:"";display:inline-block;margin-left:5px;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:4.5px solid var(--primary);vertical-align:middle}
+.tbl th.sort-desc::after{content:"";display:inline-block;margin-left:5px;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4.5px solid var(--primary);vertical-align:middle}
+.tbl td{padding:9.5px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover{background:color-mix(in srgb,var(--surface2) 55%,transparent)}
+.row-flash{animation:flash 1.8s ease}
+@keyframes flash{0%{background:var(--primary-soft)}100%{background:transparent}}
+.pager{display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:11px 14px;font-size:12.5px;color:var(--muted)}
+.pager button{border:1px solid var(--line2);background:var(--surface);border-radius:7px;min-width:28px;height:28px;font-size:12.5px;color:var(--ink)}
+.pager button:disabled{opacity:.4}
+/* forms & modals */
+.field{margin-bottom:13px}
+.field .err-t{color:var(--danger);font-size:11.5px;margin-top:4px;display:none}
+.field.bad input,.field.bad select{border-color:var(--danger)}
+.field.bad .err-t{display:block}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.m-ov{position:fixed;inset:0;background:rgba(12,18,15,.45);display:grid;place-items:center;z-index:80;padding:18px;animation:fade .16s ease}
+@keyframes fade{from{opacity:0}}
+.m-box{background:var(--surface);border-radius:14px;width:100%;max-width:520px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 18px 60px rgba(0,0,0,.28);animation:pop .18s ease}
+.m-box.wide{max-width:760px}
+@keyframes pop{from{opacity:0;transform:translateY(9px) scale(.985)}}
+.m-h{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--line)}
+.m-h h3{font-size:15.5px}
+.m-b{padding:17px 18px;overflow-y:auto}
+.m-f{padding:13px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:9px}
+/* toast / misc */
+#toast-root{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:9px;z-index:100;max-width:340px}
+.toast{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--primary);border-radius:10px;box-shadow:var(--shadow);padding:11px 14px;font-size:13px;display:flex;gap:9px;align-items:flex-start;animation:slidein .22s ease}
+.toast.err{border-left-color:var(--danger)}.toast.warn{border-left-color:var(--accent)}
+.toast svg{flex-shrink:0;margin-top:1px;color:var(--primary)}
+.toast.err svg{color:var(--danger)}.toast.warn svg{color:var(--accent)}
+@keyframes slidein{from{opacity:0;transform:translateX(14px)}}
+#tooltip{position:fixed;background:var(--side);color:#e7efe9;border-radius:8px;padding:8px 11px;font-size:12px;pointer-events:none;z-index:110;display:none;box-shadow:0 6px 22px rgba(0,0,0,.3);font-family:'IBM Plex Mono';line-height:1.55;max-width:280px}
+.sk{background:linear-gradient(90deg,var(--surface2) 25%,var(--line) 50%,var(--surface2) 75%);background-size:400% 100%;animation:shim 1.3s infinite;border-radius:8px}
+@keyframes shim{0%{background-position:100% 0}100%{background-position:0 0}}
+.empty{padding:38px 20px;text-align:center;color:var(--muted)}
+.empty svg{color:var(--line2);margin-bottom:10px}
+.empty b{display:block;color:var(--ink);font-size:14px;margin-bottom:3px}
+.chart-box{position:relative}.chart-box svg{display:block}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{width:14px;height:3px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:middle}
+.legend i.dash{background-image:linear-gradient(90deg,currentColor 55%,transparent 55%);background-size:7px 100%}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px;overflow-x:auto}
+.tab{border:none;background:none;padding:10px 15px;font-size:13.5px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;display:flex;gap:7px;align-items:center}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+.dd-panel{position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:8px;min-width:230px;max-height:280px;overflow-y:auto;display:none;z-index:50}
+.dd-panel.open{display:block}
+.dd-panel label.chk{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:13px;font-weight:400;color:var(--ink);cursor:pointer;margin:0}
+.dd-panel label.chk:hover{background:var(--surface2)}
+.dd-panel input[type=checkbox]{width:auto}
+.alert-row{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.alert-row:last-child{border-bottom:none}
+.a-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+.rec-card{display:flex;gap:14px;padding:15px 17px;border-bottom:1px solid var(--line);align-items:flex-start}
+.rec-card:last-child{border-bottom:none}
+.rec-rail{width:4px;border-radius:4px;align-self:stretch;flex-shrink:0}
+.assump{font-size:12.5px;color:var(--muted);display:grid;gap:8px;list-style:none}
+.assump li{padding-left:14px;position:relative}
+.assump li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:var(--primary);opacity:.5}
+.stat-mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.stat-mini .sm{background:var(--surface2);border-radius:10px;padding:11px 13px}
+.stat-mini .sm b{font-family:'Space Grotesk';font-size:17px;display:block}
+.stat-mini .sm span{font-size:11.5px;color:var(--muted)}
+.drop-zone{border:1.5px dashed var(--line2);border-radius:12px;padding:30px;text-align:center;color:var(--muted);cursor:pointer;transition:border-color .15s,background .15s}
+.drop-zone.over{border-color:var(--primary);background:var(--primary-soft)}
+.qlist{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.qa{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);font-size:13px;font-weight:500;color:var(--ink);transition:border-color .15s}
+.qa:hover{border-color:var(--primary)}
+.qa svg{color:var(--primary)}
+.doc h4{font-size:13.5px;margin:18px 0 6px;color:var(--primary)}
+.doc p,.doc li{font-size:13px;color:var(--muted)}
+.doc ul{margin-left:18px}
+#print-root{display:none}
+#hamburger{display:none}
+@media (max-width:1080px){.kpis{grid-template-columns:repeat(3,1fr)}.kpi:nth-child(4){border-left:none}.kpi{border-top:1px solid var(--line)}.kpi:nth-child(-n+3){border-top:none}}
+@media (max-width:900px){
+  .sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .22s ease;width:250px}
+  .sidebar.open{transform:none}
+  .scrim{display:none;position:fixed;inset:0;background:rgba(10,15,12,.5);z-index:35}
+  .scrim.show{display:block}
+  #hamburger{display:grid}
+  .app.collapsed .sidebar{width:250px}
+  .app.collapsed .brand-name,.app.collapsed .nav-label,.app.collapsed .brand-sub,.app.collapsed .data-chip span{display:block}
+  .app.collapsed .nav-item{justify-content:flex-start}
+  #page{padding:18px 16px 60px}.searchbox{max-width:none}
+}
+@media (max-width:680px){
+  .kpis{grid-template-columns:1fr 1fr}
+  .kpi{border-top:1px solid var(--line)!important;border-left:none}
+  .kpi:nth-child(odd){border-left:1px solid var(--line)}
+  .kpi:nth-child(-n+2){border-top:none}
+  .form-grid{grid-template-columns:1fr}.qlist{grid-template-columns:1fr}
+  .crumbs .crumb-root{display:none}
+}
+@media print{
+  .app,#toast-root,#modal-root,#tooltip{display:none!important}
+  #print-root{display:block!important}
+  body{background:#fff;color:#111}
+  .pr h2{font-family:'Space Grotesk';font-size:18px;margin-bottom:2px}
+  .pr table{width:100%;border-collapse:collapse;font-size:11.5px;margin:10px 0 18px}
+  .pr th,.pr td{border:1px solid #bbb;padding:5px 8px;text-align:left}
+  .pr th{background:#efefef}
+  .pr .pr-note{font-size:10.5px;color:#555;margin-top:24px;border-top:1px solid #bbb;padding-top:8px}
+}
+</style>
+</head>
+<body>
+<noscript>This application requires JavaScript.</noscript>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark" id="brandMark"></div>
+      <div><div class="brand-name">CampusGrid</div><div class="brand-sub">Load Forecasting &amp;<br>Peak Reduction</div></div>
+    </div>
+    <nav class="side-nav" id="sideNav"></nav>
+    <div class="side-foot">
+      <div class="data-chip"><span class="dot"></span><span>Sample dataset · simulated readings</span></div>
+      <button class="collapse-btn" id="collapseBtn" title="Collapse sidebar"></button>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn" id="hamburger"></button>
+      <div class="crumbs" id="crumbs"></div>
+      <div class="searchbox"><span id="searchIc"></span>
+        <input id="searchIn" type="text" placeholder="Search buildings, pages…" autocomplete="off"/>
+        <div class="search-drop" id="searchDrop"></div>
+      </div>
+      <div class="tb-right">
+        <button class="icon-btn" id="themeBtn" title="Toggle theme"></button>
+        <div class="dd" id="bellDd"><button class="icon-btn" id="bellBtn"></button><div class="dd-menu" id="bellMenu" style="min-width:330px"></div></div>
+        <div class="dd" id="profDd"><button class="avatar" id="profBtn" style="border:none"></button><div class="dd-menu" id="profMenu"></div></div>
+      </div>
+    </header>
+    <main id="page"></main>
+  </div>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+<div id="tooltip"></div>
+<div id="print-root"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   CampusGrid — single-file build (corrected).
+   Layer 1: persistent DB (localStorage, schema-validated) + index.
+   Layer 2: simulated REST API (in-page; NOT a real backend/server).
+   Layer 3: UI (hash router, 6 pages, charts, modals, toasts).
+   Boot order: validate DB -> seed demo data (index first) -> theme ->
+   renderApp (guarded, error card on any failure, never blank).
+   ===================================================================== */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const HOUR=36e5, DAY=24*HOUR;
+const floorHour=ts=>{const d=new Date(ts);d.setMinutes(0,0,0);return d.getTime()};
+const startOfDay=ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime()};
+const startOfWeek=ts=>{const d=new Date(startOfDay(ts));d.setDate(d.getDate()-((d.getDay()+6)%7));return d.getTime()};
+const startOfMonth=ts=>{const d=new Date(ts);return new Date(d.getFullYear(),d.getMonth(),1).getTime()};
+const nf=(v,d=0)=>Number(v??0).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+const fmtD=ts=>new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const fmtT=ts=>new Date(ts).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+const fmtDT=ts=>fmtD(ts)+' · '+fmtT(ts);
+const debounce=(fn,ms)=>{let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}};
+let _uid=Date.now()%1e7; const uid=()=>(++_uid).toString(36)+Math.random().toString(36).slice(2,6);
+function randn(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function csvCell(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function downloadFile(name,content,type='text/csv'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+function parseCSV(text){const rows=[];let row=[],cur='',q=false;for(let i=0;i<text.length;i++){const c=text[i];if(q){if(c==='"'){if(text[i+1]==='"'){cur+='"';i++}else q=false}else cur+=c}else{if(c==='"')q=true;else if(c===','){row.push(cur);cur=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cur);cur='';if(row.some(x=>x!==''))rows.push(row);row=[]}else cur+=c}}if(cur!==''||row.length){row.push(cur);if(row.some(x=>x!==''))rows.push(row)}return rows}
+function tsInput(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`}
+function parseWhen(s){if(!s||typeof s!=='string')return NaN;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))s+='T00:00';
+  let t=new Date(s.includes('T')||s.includes(' ')?s.replace(' ','T'):s).getTime();
+  return isNaN(t)?NaN:t}
+
+/* ---------- icons ---------- */
+const IC={
+grid:'<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>',
+chart:'<path d="M3.5 3v17.5H21"/><path d="M7.5 14.5l4-4.5 3 3 5.5-7"/>',
+trend:'<path d="M3.5 3v17.5H21"/><path d="M6.5 15l4-5 3 2.5 5.5-7.5"/><path d="M15.5 5h4v4"/>',
+sliders:'<path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2.2"/><circle cx="15.5" cy="12" r="2.2"/><circle cx="7" cy="17" r="2.2"/>',
+building:'<rect x="5" y="3" width="14" height="18" rx="1.2"/><path d="M9 7.5h2M13 7.5h2M9 11.5h2M13 11.5h2M9 15.5h2M13 15.5h2M10.5 21v-2.5h3V21"/>',
+file:'<path d="M6.5 2.5h7.5l4.5 4.5v14.5h-12z"/><path d="M13.5 2.5V7.5h5"/>',
+search:'<circle cx="11" cy="11" r="6.5"/><path d="M20.5 20.5L16 16"/>',
+bell:'<path d="M18 9a6 6 0 10-12 0c0 6-2.5 7-2.5 7h17S18 15 18 9"/><path d="M10 20a2.2 2.2 0 004 0"/>',
+sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M19.2 4.8l-1.8 1.8M6.6 17.4l-1.8 1.8"/>',
+moon:'<path d="M20.5 14.5A8.5 8.5 0 1110 3.7a7 7 0 0010.5 10.8z"/>',
+menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
+x:'<path d="M6 6l12 12M18 6L6 18"/>',
+chevL:'<path d="M14.5 5.5L8 12l6.5 6.5"/>',chevR:'<path d="M9.5 5.5L16 12l-6.5 6.5"/>',chevD:'<path d="M6 9.5l6 6 6-6"/>',
+plus:'<path d="M12 5v14M5 12h14"/>',
+pen:'<path d="M4.5 19.5l4-1L19.5 7.5l-3-3L5.5 15.5z"/><path d="M13.5 7.5l3 3"/>',
+trash:'<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13.5h9l1-13.5M10.5 11v6M13.5 11v6"/>',
+dl:'<path d="M12 3.5v11M7 10l5 5 5-5"/><path d="M4.5 20.5h15"/>',
+ul:'<path d="M12 14.5v-11M7 8l5-5 5 5"/><path d="M4.5 20.5h15"/>',
+check:'<path d="M4.5 12.5l5 5L19.5 7"/>',
+warn:'<path d="M12 3.5L2.5 20h19z"/><path d="M12 9.5v4.5M12 17.2v.3"/>',
+info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.3"/>',
+gear:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5 5l2.1 2.1M16.9 16.9L19 19M19 5l-2.1 2.1M7.1 16.9L5 19"/>',
+zap:'<path d="M13 2.5L4.5 13.5H11l-1 8 8.5-11H12z"/>',
+printer:'<path d="M7 8V3.5h10V8M7 17H4.5v-8h15v8H17"/><rect x="7" y="14" width="10" height="6.5"/>',
+refresh:'<path d="M20 11.5A8 8 0 105.6 17.3"/><path d="M20 4.5v7h-7"/>',
+cal:'<rect x="3.5" y="5" width="17" height="16" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>',
+leaf:'<path d="M5 19c0-8 5-13 15-14-.5 10-5 14-11 14-1.5 0-3-.4-4-1"/><path d="M5 19c3-5 7-8 11-9.5"/>',
+};
+const I=(n,s=18)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${IC[n]||''}</svg>`;
+ $('#brandMark').innerHTML=`<svg width="20" height="20" viewBox="0 0 24 24" fill="#3ab78a">${IC.zap.replace(/stroke="[^"]*"/g,'stroke="none"')}</svg>`;
+ $('#searchIc').innerHTML=I('search',16);
+ $('#hamburger').innerHTML=I('menu');
+ $('#collapseBtn').innerHTML=I('chevL',16);
+
+/* ================= Layer 1 & 2: REST API Client & In-Memory State ================= */
+const API_BASE = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
+  ? (window.location.origin + '/api')
+  : 'http://127.0.0.1:8000/api';
+
+const DB = {
+  DEFAULT_SETTINGS: {
+    campusName: 'Riverview Technical College',
+    location: 'Riverview',
+    currency: '$',
+    rate: 0.118,
+    demandRate: 14.5,
+    peakThreshold: 450,
+    evCharging: true,
+    evKw: 22,
+    userName: 'A. Jordan',
+    role: 'Energy Manager',
+    theme: 'light',
+    reduceMotion: false
+  },
+  data: {
+    buildings: [],
+    readings: [],
+    recs: [],
+    alerts: [],
+    forecasts: [],
+    settings: {
+      campusName: 'Riverview Technical College',
+      location: 'Riverview',
+      currency: '$',
+      rate: 0.118,
+      demandRate: 14.5,
+      peakThreshold: 450,
+      evCharging: true,
+      evKw: 22,
+      userName: 'A. Jordan',
+      role: 'Energy Manager',
+      theme: 'light',
+      reduceMotion: false
+    },
+    meta: { sample: false }
+  },
+  save() {},
+  flush() {},
+  wipe() {}
+};
+
+function S() {
+  return (DB.data && DB.data.settings) ? DB.data.settings : DB.DEFAULT_SETTINGS;
+}
+
+const api = {
+  async request(method, path, {query={}, body={}}={}) {
+    try {
+      let url = API_BASE + path;
+      const qKeys = Object.keys(query);
+      if (qKeys.length) {
+        const params = new URLSearchParams();
+        for (const k of qKeys) {
+          const val = query[k];
+          if (val !== undefined && val !== null && val !== '') {
+            if (Array.isArray(val)) {
+              val.forEach(v => params.append(k, v));
+            } else {
+              params.append(k, val);
+            }
+          }
+        }
+        const qs = params.toString();
+        if (qs) url += '?' + qs;
+      }
+
+      const opts = {
+        method,
+        headers: { 'Content-Type': 'application/json' }
+      };
+      if (method !== 'GET' && method !== 'HEAD' && body && Object.keys(body).length > 0) {
+        opts.body = JSON.stringify(body);
+      }
+
+      const res = await fetch(url, opts);
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        let errorMsg = `HTTP ${res.status}: ${res.statusText}`;
+        if (data) {
+          if (typeof data.detail === 'string') errorMsg = data.detail;
+          else if (Array.isArray(data.detail) && data.detail[0] && data.detail[0].msg) errorMsg = data.detail[0].msg;
+          else if (data.error) errorMsg = data.error;
+        }
+        return { ok: false, error: errorMsg, status: res.status };
+      }
+
+      // Synchronize in-memory cache so frontend lookups find actual DB items
+      if (path === '/settings' && (method === 'GET' || method === 'PUT')) {
+        if (DB.data) DB.data.settings = data;
+      } else if (path === '/buildings' && method === 'GET') {
+        if (DB.data && data && data.items) {
+          const existingMap = new Map((DB.data.buildings || []).map(b => [b.id, b]));
+          data.items.forEach(b => existingMap.set(b.id, b));
+          DB.data.buildings = [...existingMap.values()];
+          DB.data.meta.sample = DB.data.buildings.some(b => b.sample);
+        }
+      } else if (path === '/buildings/all' && method === 'GET') {
+        if (DB.data && Array.isArray(data)) {
+          const existingMap = new Map((DB.data.buildings || []).map(b => [b.id, b]));
+          data.forEach(b => {
+            if (!existingMap.has(b.id)) existingMap.set(b.id, b);
+          });
+          DB.data.buildings = [...existingMap.values()];
+        }
+      } else if (path.startsWith('/buildings/') && method === 'GET') {
+        if (DB.data && data && data.id) {
+          const idx = (DB.data.buildings || []).findIndex(b => b.id === data.id);
+          if (idx >= 0) DB.data.buildings[idx] = data;
+          else DB.data.buildings.push(data);
+        }
+      } else if (path === '/readings' && method === 'GET') {
+        if (DB.data && data && data.items) {
+          DB.data.readings = data.items;
+        }
+      } else if (path === '/recommendations' && method === 'GET') {
+        if (DB.data && Array.isArray(data)) {
+          DB.data.recs = data;
+        }
+      } else if (path.startsWith('/recommendations/') && method === 'PATCH') {
+        if (DB.data && data && data.id) {
+          const idx = (DB.data.recs || []).findIndex(r => r.id === data.id);
+          if (idx >= 0) DB.data.recs[idx] = data;
+          else (DB.data.recs = DB.data.recs || []).push(data);
+        }
+      } else if (path === '/overview' && method === 'GET') {
+        if (DB.data && data) {
+          if (data.threshold && DB.data.settings) DB.data.settings.peakThreshold = data.threshold;
+          if (data.compare && DB.data.meta) {
+            DB.data.meta.sample = (DB.data.buildings || []).some(b => b.sample);
+          }
+        }
+      }
+
+      return { ok: true, data };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e.message || 'Cannot connect to backend server. Make sure the backend is running.',
+        status: 500
+      };
+    }
+  }
+};
+
+/* ================= charts (hand-rolled SVG) ================= */
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function niceTicks(min,max,n=5){const span=max-min||1,s0=span/Math.max(1,n),mag=Math.pow(10,Math.floor(Math.log10(s0))),nm=s0/mag,step=(nm<1.5?1:nm<3?2:nm<7?5:10)*mag;const out=[];for(let v=Math.ceil(min/step)*step;v<=max+1e-9;v+=step)out.push(v);return out}
+function makeXTicks(xs,fmt,n=6){if(!xs.length)return[];const step=Math.max(1,Math.floor(xs.length/n));const out=[];for(let i=0;i<xs.length;i+=step)out.push({x:xs[i],label:fmt(xs[i])});return out}
+function pathOf(pts,sx,sy){let d='',pen=false;for(const p of pts){if(p.y==null||isNaN(p.y)){pen=false;continue}d+=(pen?'L':'M')+sx(p.x).toFixed(1)+' '+sy(p.y).toFixed(1);pen=true}return d}
+function lineChart(el,cfg){
+  const W=Math.max(el.clientWidth||620,260),Hh=cfg.height||270,M={t:12,r:56,b:26,l:54};
+  const all=cfg.series.flatMap(s=>s.points).concat(cfg.band?cfg.band.points:[]);
+  if(!all.length){el.innerHTML='<div class="empty">No data for this selection</div>';return}
+  let ymin=Infinity,ymax=-Infinity;
+  for(const p of all){if(p.y==null||isNaN(p.y))continue;ymin=Math.min(ymin,p.y,p.y0??p.y,p.y1??p.y);ymax=Math.max(ymax,p.y,p.y0??p.y,p.y1??p.y)}
+  if(cfg.threshold!=null){ymin=Math.min(ymin,cfg.threshold);ymax=Math.max(ymax,cfg.threshold)}
+  if(!isFinite(ymin)){el.innerHTML='<div class="empty">No data</div>';return}
+  if(ymin===ymax){ymin-=1;ymax+=1}
+  const pad=(ymax-ymin)*.09;ymin-=pad;ymax+=pad;
+  const xs=[...new Set(all.map(p=>p.x))].sort((a,b)=>a-b),x0=xs[0],x1=xs[xs.length-1]||x0+1;
+  const sx=v=>M.l+(v-x0)/((x1-x0)||1)*(W-M.l-M.r);
+  const sy=v=>M.t+(1-(v-ymin)/(ymax-ymin))*(Hh-M.t-M.b);
+  let g=niceTicks(ymin,ymax,5).map(v=>`<line x1="${M.l}" y1="${sy(v).toFixed(1)}" x2="${W-M.r}" y2="${sy(v).toFixed(1)}" stroke="${cssv('--line')}"/><text x="${M.l-7}" y="${(sy(v)+3.5).toFixed(1)}" text-anchor="end" font-size="10.5" fill="${cssv('--muted')}" font-family="IBM Plex Mono">${cfg.yFmt?cfg.yFmt(v):nf(v)}</text>`).join('');
+  g+=(cfg.xTicks||makeXTicks(xs,cfg.xFmt||(v=>fmtD(v)))).map(t=>`<text x="${sx(t.x).toFixed(1)}" y="${Hh-8}" text-anchor="middle" font-size="10.5" fill="${cssv('--muted')}">${esc(t.label)}</text>`).join('');
+  if(cfg.band){const bp=cfg.band.points.filter(p=>p.y0!=null&&p.y1!=null&&!isNaN(p.y0)&&!isNaN(p.y1));
+    if(bp.length>1){let d='M'+sx(bp[0].x).toFixed(1)+' '+sy(bp[0].y1).toFixed(1);
+      for(let i=1;i<bp.length;i++)d+=' L'+sx(bp[i].x).toFixed(1)+' '+sy(bp[i].y1).toFixed(1);
+      for(let i=bp.length-1;i>=0;i--)d+=' L'+sx(bp[i].x).toFixed(1)+' '+sy(bp[i].y0).toFixed(1);
+      g+=`<path d="${d} Z" fill="${cfg.band.color||cssv('--c3')}" opacity="0.13"/>`}}
+  if(cfg.threshold!=null)g+=`<line x1="${M.l}" y1="${sy(cfg.threshold)}" x2="${W-M.r}" y2="${sy(cfg.threshold)}" stroke="${cssv('--danger')}" stroke-width="1.3" stroke-dasharray="5 4"/><text x="${W-M.r+5}" y="${sy(cfg.threshold)+3.5}" font-size="10" fill="${cssv('--danger')}" font-family="IBM Plex Mono">${cfg.thresholdLabel??nf(cfg.threshold)}</text>`;
+  for(const s of cfg.series){
+    const vis=s.points.filter(p=>p.y!=null&&!isNaN(p.y));
+    if(s.area&&vis.length>1){
+      const d=pathOf(s.points,sx,sy);
+      g+=`<path d="${d} L ${sx(vis[vis.length-1].x).toFixed(1)} ${sy(Math.max(ymin,0)).toFixed(1)} L ${sx(vis[0].x).toFixed(1)} ${sy(Math.max(ymin,0)).toFixed(1)} Z" fill="${s.color}" opacity="0.09"/>`}
+    g+=`<path d="${pathOf(s.points,sx,sy)}" fill="none" stroke="${s.color}" stroke-width="${s.width||1.9}" ${s.dashed?'stroke-dasharray="5 4"':''} stroke-linejoin="round" opacity="${s.opacity||1}"/>`;
+  }
+  g+=`<line id="__ch" y1="${M.t}" y2="${Hh-M.b}" stroke="${cssv('--muted')}" stroke-dasharray="3 3" opacity="0"/><rect id="__ov" x="${M.l}" y="${M.t}" width="${W-M.l-M.r}" height="${Hh-M.t-M.b}" fill="transparent"/>`;
+  el.innerHTML=`<svg width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}">${g}</svg>`;
+  const tt=$('#tooltip'),ch=$('#__ch',el),ov=$('#__ov',el);
+  ov.addEventListener('mousemove',e=>{
+    const r=el.getBoundingClientRect(),mx=e.clientX-r.left;
+    let bestI=0,bestD=Infinity;xs.forEach((x,i)=>{const d=Math.abs(sx(x)-mx);if(d<bestD){bestD=d;bestI=i}});
+    const xv=xs[bestI];ch.setAttribute('x1',sx(xv));ch.setAttribute('x2',sx(xv));ch.setAttribute('opacity','.5');
+    let rows='';for(const s of cfg.series){const p=s.points.find(q=>q.x===xv);
+      if(p&&p.y!=null&&!isNaN(p.y))rows+=`<div><span style="color:${s.color}">■</span> ${esc(s.name)}: <b>${cfg.yFmt?cfg.yFmt(p.y):nf(p.y,1)}</b></div>`}
+    if(cfg.band){const p=cfg.band.points.find(q=>q.x===xv);if(p&&p.y0!=null)rows+=`<div style="opacity:.75">95% interval: ${nf(p.y0,0)} – ${nf(p.y1,0)}</div>`}
+    tt.innerHTML=`<div style="font-family:'IBM Plex Sans';opacity:.8;margin-bottom:2px">${esc(cfg.xFmt?cfg.xFmt(xv):fmtDT(xv))}</div>`+rows;
+    tt.style.display='block';
+    const tw=tt.offsetWidth;let lx=e.clientX+14;if(lx+tw>innerWidth-8)lx=e.clientX-tw-14;
+    tt.style.left=lx+'px';tt.style.top=Math.max(8,e.clientY-30)+'px';
+  });
+  ov.addEventListener('mouseleave',()=>{tt.style.display='none';ch.setAttribute('opacity','0')});
+}
+function hBarChart(el,{rows,fmt}){
+  if(!rows.length){el.innerHTML='<div class="empty">No data</div>';return}
+  const W=Math.max(el.clientWidth||620,260),rowH=34,Hh=rows.length*rowH+8,max=Math.max(...rows.map(r=>r.value))||1,labW=Math.min(150,W*.3);
+  let g='';rows.forEach((r,i)=>{const y=i*rowH+8,bw=Math.max(2,(W-labW-78)*r.value/max);
+    g+=`<text x="${labW-8}" y="${y+13}" text-anchor="end" font-size="11.5" fill="${cssv('--ink')}">${esc(r.label.length>20?r.label.slice(0,19)+'…':r.label)}</text>
+    <rect class="__bar" data-i="${i}" x="${labW}" y="${y}" width="${bw}" height="20" rx="5" fill="${r.color||cssv('--c1')}" opacity="0.85"/>
+    <text x="${labW+bw+8}" y="${y+13}" font-size="11" fill="${cssv('--muted')}" font-family="IBM Plex Mono">${fmt?fmt(r.value):nf(r.value)}</text>`});
+  el.innerHTML=`<svg width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}">${g}</svg>`;
+  const tt=$('#tooltip');
+  $$('.__bar',el).forEach(b=>{b.addEventListener('mousemove',e=>{const r=rows[+b.dataset.i];
+    tt.innerHTML=`<b>${esc(r.label)}</b><br>${fmt?fmt(r.value):nf(r.value)}${r.sub?`<br><span style="opacity:.7">${esc(r.sub)}</span>`:''}`;
+    tt.style.display='block';tt.style.left=(e.clientX+14)+'px';tt.style.top=(e.clientY-14)+'px'});
+    b.addEventListener('mouseleave',()=>tt.style.display='none')});
+}
+
+/* ================= UI primitives ================= */
+function toast(msg,type='ok'){
+  const t=document.createElement('div');t.className='toast '+type;
+  t.innerHTML=I(type==='ok'?'check':'warn',16)+`<div>${msg}</div>`;
+  $('#toast-root').appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),320)},3600);
+}
+function openModal({title,body,footer,wide,onClose}){
+  const ov=document.createElement('div');ov.className='m-ov';
+  ov.innerHTML=`<div class="m-box${wide?' wide':''}"><div class="m-h"><h3>${title}</h3><button class="icon-btn" data-close>${I('x')}</button></div><div class="m-b"></div>${footer?'<div class="m-f"></div>':''}</div>`;
+  typeof body==='string'?$('.m-b',ov).innerHTML=body:$('.m-b',ov).appendChild(body);
+  if(footer)typeof footer==='string'?$('.m-f',ov).innerHTML=footer:$('.m-f',ov).appendChild(footer);
+  $('#modal-root').appendChild(ov);
+  const close=()=>{ov.remove();document.removeEventListener('keydown',onKey);onClose&&onClose()};
+  const onKey=e=>{if(e.key==='Escape')close()};
+  document.addEventListener('keydown',onKey);
+  ov.addEventListener('mousedown',e=>{if(e.target===ov)close()});
+  $('[data-close]',ov).addEventListener('click',close);
+  $$('[data-cancel]',ov).forEach(b=>b.addEventListener('click',close));
+  return{el:ov,close,$:s=>$(s,ov)};
+}
+function confirmDlg({title='Are you sure?',message,okText='Confirm',danger=false}){
+  return new Promise(res=>{
+    const m=openModal({title,body:`<p style="color:var(--muted);font-size:13.5px">${message}</p>`,
+      footer:`<button class="btn" data-cancel>Cancel</button><button class="btn ${danger?'danger':'primary'}" data-ok>${okText}</button>`});
+    $('[data-ok]',m.el).addEventListener('click',()=>{m.close();res(true)});
+    m.el.addEventListener('mousedown',e=>{if(e.target===m.el)res(false)});
+    const kc=e=>{if(e.key==='Escape'){res(false);document.removeEventListener('keydown',kc)}};
+    document.addEventListener('keydown',kc);
+  });
+}
+function skeleton(){const d=document.createElement('div');
+  d.innerHTML=`<div class="sk" style="height:34px;width:280px;margin-bottom:22px"></div><div class="grid" style="gap:14px"><div class="sk" style="height:110px"></div><div class="grid" style="grid-template-columns:2fr 1fr"><div class="sk" style="height:300px"></div><div class="sk" style="height:300px"></div></div></div>`;
+  return d}
+function errorState(root,msg){root.innerHTML=`<div class="card" style="margin-top:30px"><div class="empty">${I('warn',34)}<b>Something went wrong</b><span>${esc(msg||'Unknown error')}</span><div style="margin-top:14px"><button class="btn primary" onclick="renderApp()">Retry</button></div></div></div>`}
+function emptyBlock(icon,title,sub){return `<div class="empty">${I(icon,34)}<b>${title}</b>${sub||''}</div>`}
+function pagerHtml(page,pages,action){return `<div class="pager"><button data-action="${action}" data-p="${page-1}" ${page<=1?'disabled':''}>${I('chevL',14)}</button><span>Page ${page} of ${pages}</span><button data-action="${action}" data-p="${page+1}" ${page>=pages?'disabled':''}>${I('chevR',14)}</button></div>`}
+function sortHeader(label,key,curK,curD){const d=curK===key?curD:'';return `<th class="sortable sort-${d}" data-action="__sort" data-key="${key}">${label}</th>`}
+/* FIX: register() MERGES into a persistent ACTIONS map. The old version
+   REPLACED the map, so the Reports→Settings tab silently disabled every
+   other handler on that page. Handlers are (re)registered on page mount,
+   so the active page always wins and existing handlers are preserved. */
+const ACTIONS={};
+const register=map=>{Object.assign(ACTIONS,map)};
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-action]');
+  if(t&&t.isConnected){const fn=ACTIONS[t.dataset.action];if(fn){e.preventDefault();fn(t,e)}}
+  $$('.dd.open').forEach(d=>{if(!d.contains(e.target))d.classList.remove('open')});
+  $$('.dd-panel.open').forEach(d=>{if(!d.parentElement.contains(e.target))d.classList.remove('open')});
+});
+
+/* ================= layout chrome ================= */
+const NAVS=[
+  {id:'dashboard',label:'Dashboard',icon:'grid'},
+  {id:'analytics',label:'Energy Analytics',icon:'chart'},
+  {id:'forecasting',label:'Load Forecasting',icon:'trend'},
+  {id:'optimization',label:'Peak Reduction',icon:'sliders'},
+  {id:'campus',label:'Campus & Data',icon:'building'},
+  {id:'reports',label:'Reports & Settings',icon:'file'},
+];
+const TABNAMES={campus:{buildings:'Buildings',records:'Energy Records',import:'CSV Import',quality:'Data Quality'},
+  reports:{reports:'Reports',alerts:'Alerts & Config',settings:'Settings',info:'Project Information'}};
+ $('#sideNav').innerHTML=NAVS.map(n=>`<button class="nav-item" data-route="${n.id}" title="${n.label}">${I(n.icon)}<span class="nav-label">${n.label}</span></button>`).join('');
+let CURRENT={path:'dashboard',query:{}};
+function go(hash){if(location.hash===hash)renderApp();else location.hash=hash}
+function parseHash(){const h=(location.hash||'').replace(/^#\/?/,''),[p,qs]=h.split('?'),query={};
+  if(qs)qs.split('&').forEach(kv=>{const[k,v]=kv.split('=');query[decodeURIComponent(k)]=decodeURIComponent(v||'')});
+  return{path:NAVS.some(n=>n.id===p)?p:'dashboard',query}}
+function setQuery(q){CURRENT.query={...CURRENT.query,...q};const parts=[CURRENT.path];
+  for(const k in CURRENT.query)if(CURRENT.query[k])parts.push(k+'='+encodeURIComponent(CURRENT.query[k]));
+  try{history.replaceState(null,'','#/'+parts.join('?'))}catch(e){location.hash='#/'+parts.join('?')}
+  renderChrome()}
+function renderChrome(){
+  const{path,query}=CURRENT;
+  $$('#sideNav .nav-item').forEach(b=>b.classList.toggle('active',b.dataset.route===path));
+  const n=NAVS.find(x=>x.id===path)||NAVS[0];
+  let crumbs=`<span class="crumb-root">CampusGrid</span><span style="opacity:.4">/</span><b>${n.label}</b>`;
+  if(query.tab&&TABNAMES[path]&&TABNAMES[path][query.tab])crumbs+=`<span style="opacity:.4">/</span><b style="font-weight:500;color:var(--muted)">${TABNAMES[path][query.tab]}</b>`;
+  $('#crumbs').innerHTML=crumbs;
+  document.title=`${n.label} · CampusGrid`;
+  const s=S();
+  $('#profBtn').textContent=String(s.userName||'U').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase()||'U';
+  updateBell();
+}
+async function updateBell(){
+  try{
+    const r=await api.request('GET','/alerts');if(!r.ok)return;
+    const un=r.data.unread;
+    $('#bellBtn').innerHTML=I('bell')+(un?`<span class="badge-dot">${un>9?'9+':un}</span>`:'');
+    $('#bellMenu').innerHTML=`<div class="dd-head"><b style="color:var(--ink)">Notifications</b><button class="btn ghost sm" data-action="bell-readall">Mark all read</button></div>
+      <div style="max-height:300px;overflow-y:auto;padding:4px 14px">${r.data.items.slice(0,8).map(a=>`
+        <div class="alert-row" style="opacity:${a.read?'.55':'1'}"><div class="a-ic" style="background:${a.type==='peak'?'var(--danger-soft)':'var(--accent-soft)'};color:${a.type==='peak'?'var(--danger)':'var(--accent)'}">${I(a.type==='peak'?'zap':'warn',15)}</div>
+        <div style="font-size:12.5px;min-width:0"><div>${esc(a.message)}</div><div style="color:var(--muted);font-size:11px;margin-top:2px">${fmtDT(a.ts)}</div></div></div>`).join('')||'<div class="empty">No alerts yet</div>'}</div>
+      <div class="dd-head" style="border-top:1px solid var(--line);border-bottom:none"><button class="btn ghost sm" data-action="bell-open" style="margin:0 auto">View alert history →</button></div>`;
+  }catch(e){console.warn('updateBell failed',e)}
+}
+ $('#bellDd').addEventListener('click',e=>{if(e.target.closest('#bellBtn'))$('#bellDd').classList.toggle('open')});
+ $('#profDd').addEventListener('click',e=>{if(e.target.closest('#profBtn')){$('#profDd').classList.toggle('open');
+  const s=S();
+  $('#profMenu').innerHTML=`<div class="dd-head"><div class="meta"><b>${esc(s.userName)}</b><span>${esc(s.role)} · ${esc(s.campusName)}</span></div></div>
+    <button class="dd-item" data-action="prof-theme">${s.theme==='dark'?I('sun'):I('moon')} Switch to ${s.theme==='dark'?'light':'dark'} mode</button>
+    <button class="dd-item" data-action="prof-info">${I('info')} Project information</button>
+    <button class="dd-item" data-action="prof-settings">${I('gear')} Settings</button>
+    <button class="dd-item" data-action="prof-reset" style="color:var(--danger)">${I('refresh')} Reset & reseed sample data</button>`}});
+register({
+  'bell-readall':async()=>{const r=await api.request('POST','/alerts/read-all');r.ok?toast('All alerts marked as read'):toast(r.error,'err');updateBell()},
+  'bell-open':()=>go('#/reports?tab=alerts'),
+  'prof-theme':()=>setTheme(S().theme==='dark'?'light':'dark'),
+  'prof-info':()=>go('#/reports?tab=info'),
+  'prof-settings':()=>go('#/reports?tab=settings'),
+  'prof-reset':async()=>{if(await confirmDlg({title:'Reset all data?',message:'This deletes every building, reading, forecast, recommendation and alert, then reloads the labelled sample dataset.',okText:'Reset & reseed',danger:true})){await api.request('POST','/reset-sample');location.reload()}},
+});
+function applyTheme(){
+  const t=S();
+  document.documentElement.dataset.theme=t.theme==='dark'?'dark':'light';
+  document.documentElement.dataset.motion=t.reduceMotion?'off':'on';
+  $('#themeBtn').innerHTML=I(t.theme==='dark'?'sun':'moon');
+}
+async function setTheme(t){const r=await api.request('PUT','/settings',{body:{theme:t}});if(!r.ok)return toast(r.error,'err');applyTheme();renderApp()}
+ $('#themeBtn').addEventListener('click',()=>setTheme(S().theme==='dark'?'light':'dark'));
+ $('#collapseBtn').addEventListener('click',()=>{try{localStorage.setItem('cg.collapsed',$('#app').classList.toggle('collapsed')?'1':'')}catch(e){}});
+try{if(localStorage.getItem('cg.collapsed'))$('#app').classList.add('collapsed')}catch(e){}
+ $('#hamburger').addEventListener('click',()=>{const o=$('#sidebar').classList.toggle('open');$('#scrim').classList.toggle('show',o)});
+ $('#scrim').addEventListener('click',()=>{$('#sidebar').classList.remove('open');$('#scrim').classList.remove('show')});
+ $('#sideNav').addEventListener('click',e=>{const b=e.target.closest('[data-route]');if(b){go('#/'+b.dataset.route);$('#sidebar').classList.remove('open');$('#scrim').classList.remove('show')}});
+/* topbar search */
+const searchIn=$('#searchIn');
+searchIn.addEventListener('input',debounce(async()=>{
+  const q=searchIn.value.trim(),drop=$('#searchDrop');
+  if(q.length<2){drop.classList.remove('open');return}
+  const rb=await api.request('GET','/buildings',{query:{search:q,pageSize:5}});
+  const items=[...NAVS.filter(n=>n.label.toLowerCase().includes(q.toLowerCase())).map(p=>({kind:'Page',label:p.label,route:'#/'+p.id})),
+    ...(rb.ok?rb.data.items.map(b=>({kind:'Building',label:b.name+' — '+b.type,route:'#/campus?tab=buildings&focus='+b.id})):[])];
+  drop.innerHTML=items.map((it,i)=>`<div class="sr-item" data-sr="${i}">${I(it.kind==='Page'?'file':'building',15)}<span>${esc(it.label)}</span><span class="kind">${it.kind}</span></div>`).join('')||'<div class="empty" style="padding:16px">No matches</div>';
+  drop.classList.add('open');
+  $$('[data-sr]',drop).forEach(el=>el.addEventListener('click',()=>{go(items[+el.dataset.sr].route);drop.classList.remove('open');searchIn.value=''}));
+},150));
+
+/* ================= per-page UI state ================= */
+const ST={dashboard:{range:30,grain:'day'},
+  analytics:{ids:null,from:Date.now()-29*DAY,to:Date.now(),bucket:'day',sortK:'total',sortD:'desc'},
+  forecasting:{building:'*',grain:'hour',horizon:48},
+  optimization:{source:'recent',filter:'all'},
+  campus:{q:'',sortK:'name',sortD:'asc',page:1,rPage:1,rB:'',rFrom:'',rTo:''},
+  reports:{}};
+const PAGES={};
+
+/* ================= PAGE 1 — DASHBOARD ================= */
+PAGES.dashboard=async root=>{
+  const st=ST.dashboard;
+  const load=async()=>{
+    const from=startOfDay(Date.now()-(st.range-1)*DAY),to=startOfDay(Date.now())+DAY;
+    const r=await api.request('GET','/overview',{query:{from,to,bucket:st.grain}});
+    if(!r.ok)return errorState(root,r.error);
+    const D=r.data,cur=S();
+    root.innerHTML=`
+    <div class="page-head"><div><h1>Dashboard</h1><div class="sub">${esc(cur.campusName)} — campus energy overview for the last ${st.range} days. All figures derive from stored readings${DB.data.meta.sample?' (sample dataset)':''}.</div></div>
+      <div class="head-actions"><div class="seg">${[7,30,90].map(x=>`<button data-action="dash-range" data-r="${x}" class="${st.range===x?'active':''}">${x} days</button>`).join('')}</div></div></div>
+    <div class="card" style="margin-bottom:16px"><div class="kpis">
+      <div class="kpi"><div class="k-label">${I('zap',13)} Total consumption</div><div class="k-val">${nf(D.summary.kwh)}<small>kWh</small></div>
+        <div class="k-sub">${D.summary.deltaPct==null?'no prior-period data':`<span class="${D.summary.deltaPct<=0?'up':'down'}">${D.summary.deltaPct<=0?'▼':'▲'} ${nf(Math.abs(D.summary.deltaPct),1)}%</span> vs previous ${st.range} days`}</div></div>
+      <div class="kpi"><div class="k-label">${I('trend',13)} Current demand</div><div class="k-val">${nf(D.summary.currentKw,1)}<small>kW</small></div><div class="k-sub">${D.summary.currentTs?fmtDT(D.summary.currentTs):'latest recorded hour'}</div></div>
+      <div class="kpi"><div class="k-label">${I('file',13)} Energy cost</div><div class="k-val">${cur.currency}${nf(D.summary.cost)}</div><div class="k-sub">@ ${cur.currency}${nf(cur.rate,3)}/kWh, excl. demand charge</div></div>
+      <div class="kpi"><div class="k-label">${I('warn',13)} Peak demand</div><div class="k-val">${nf(D.summary.peakKw,1)}<small>kW</small></div><div class="k-sub">${D.summary.peakTs?fmtDT(D.summary.peakTs):'—'}</div></div>
+      <div class="kpi"><div class="k-label">${I('leaf',13)} Est. savings</div><div class="k-val">${cur.currency}${nf(D.summary.savingsEst)}</div><div class="k-sub">estimated${D.summary.savingsMeas>0?` · <span class="up">${cur.currency}${nf(D.summary.savingsMeas)} measured</span>`:' · none measured yet'}</div></div>
+    </div></div>
+    <div class="card" style="margin-bottom:16px"><div class="card-h"><h3>${I('trend',16)} Campus demand — last 48 hours</h3><span class="hint">threshold ${nf(D.threshold)} kW · one point = kWh for the hour (≈ avg kW)</span></div>
+      <div class="card-b"><div class="chart-box" id="ch-ribbon"></div></div></div>
+    <div class="grid" style="grid-template-columns:minmax(0,7fr) minmax(0,5fr);margin-bottom:16px">
+      <div class="card"><div class="card-h"><h3>${I('chart',16)} Consumption</h3>
+        <div class="seg">${[['day','Daily'],['week','Weekly'],['month','Monthly']].map(([k,l])=>`<button data-action="dash-grain" data-g="${k}" class="${st.grain===k?'active':''}">${l}</button>`).join('')}</div></div>
+        <div class="card-b"><div class="chart-box" id="ch-main"></div></div></div>
+      <div class="card"><div class="card-h"><h3>${I('building',16)} Building comparison</h3><span class="hint">${st.range}-day kWh</span></div>
+        <div class="card-b"><div class="chart-box" id="ch-bars"></div></div></div>
+    </div>
+    <div class="grid" style="grid-template-columns:minmax(0,7fr) minmax(0,5fr)">
+      <div class="card"><div class="card-h"><h3>${I('warn',16)} Peak-demand warnings</h3><span class="hint">hours above ${nf(D.threshold)} kW in period</span></div>
+        <div class="card-b" style="padding-top:6px;padding-bottom:6px">${D.windows.length?D.windows.map(w=>`
+          <div class="alert-row"><div class="a-ic" style="background:var(--danger-soft);color:var(--danger)">${I('zap',15)}</div>
+          <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${nf(w.peak,1)} kW peak · ${w.h} hour${w.h>1?'s':''} above threshold</div>
+          <div style="color:var(--muted);font-size:12px">${fmtDT(w.start)} → ${fmtT(w.end+HOUR)} · excess ${nf(w.excess,1)} kWh</div></div>
+          <button class="btn sm" data-action="go-opt">Optimise</button></div>`).join('')
+          :emptyBlock('check','No threshold exceedances','Campus demand stayed below the configured threshold in this period.')}</div></div>
+      <div class="card"><div class="card-h"><h3>${I('bell',16)} Recent alerts</h3><button class="btn ghost sm" data-action="go-alerts">History →</button></div>
+        <div class="card-b" style="padding-top:6px;padding-bottom:6px">${D.alerts.items.map(a=>`
+          <div class="alert-row"><div class="a-ic" style="background:${a.type==='peak'?'var(--danger-soft)':'var(--accent-soft)'};color:${a.type==='peak'?'var(--danger)':'var(--accent)'}">${I(a.type==='peak'?'zap':'warn',15)}</div>
+          <div style="min-width:0;font-size:12.5px"><div>${esc(a.message)}</div><div style="color:var(--muted);font-size:11px;margin-top:2px">${fmtDT(a.ts)}${a.read?'':' · <b style="color:var(--primary)">new</b>'}</div></div></div>`).join('')
+          ||emptyBlock('bell','No alerts','Run a check from the Reports page.')}</div></div>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="card-h"><h3>${I('zap',16)} Quick actions</h3></div>
+      <div class="card-b"><div class="qlist">
+        <button class="qa" data-action="qa" data-to="#/forecasting">${I('trend')} Run a load forecast</button>
+        <button class="qa" data-action="qa" data-to="#/optimization">${I('sliders')} Review peak-reduction plan</button>
+        <button class="qa" data-action="qa" data-to="#/campus?tab=import">${I('ul')} Upload CSV readings</button>
+        <button class="qa" data-action="qa" data-to="#/reports?tab=reports">${I('file')} Generate a report</button>
+      </div></div></div>`;
+    lineChart($('#ch-ribbon'),{height:120,threshold:D.threshold,thresholdLabel:'threshold',
+      series:[{name:'Demand (kWh/h)',color:cssv('--c1'),points:D.ribbon.map(d=>({x:d.t,y:d.v})),area:true}]});
+    lineChart($('#ch-main'),{height:280,series:[{name:'Consumption (kWh)',color:cssv('--c1'),points:D.series.map(d=>({x:d.t,y:d.v})),area:true}],
+      yFmt:v=>nf(v),xFmt:v=>st.grain==='day'?fmtD(v):st.grain==='week'?new Date(v).toLocaleDateString('en-US',{month:'short',day:'numeric'}):new Date(v).toLocaleDateString('en-US',{month:'short',year:'numeric'})});
+    hBarChart($('#ch-bars'),{rows:D.compare.slice(0,6).map((b,i)=>({label:b.name,value:Math.round(b.total),color:cssv('--c'+((i%6)+1)),sub:nf(b.intensity,2)+' kWh/m²'})),fmt:v=>nf(v)+' kWh'});
+  };
+  await load();
+  register({
+    'dash-range':t=>{st.range=+t.dataset.r;PAGES.dashboard(root)},
+    'dash-grain':t=>{st.grain=t.dataset.g;PAGES.dashboard(root)},
+    'go-opt':()=>go('#/optimization'),'go-alerts':()=>go('#/reports?tab=alerts'),
+    'qa':t=>go(t.dataset.to),
+  });
+};
+
+/* ================= PAGE 2 — ENERGY ANALYTICS ================= */
+PAGES.analytics=async root=>{
+  const st=ST.analytics;
+  const blds=await api.request('GET','/buildings/all');
+  const bList=blds.ok?blds.data:[];
+  const bName=id=>id==='*'?'Campus total':(bList.find(b=>b.id===id)||{}).name||id;
+  let AD=null; // FIX: page-scoped handle on the last analytics payload (the CSV
+              // handler previously referenced an out-of-scope D → ReferenceError)
+  const load=async()=>{
+    const r=await api.request('GET','/analytics',{query:{ids:st.ids||[],from:st.from,to:st.to,bucket:st.bucket}});
+    if(!r.ok)return errorState(root,r.error);
+    AD=r.data;draw(AD);
+  };
+  const colors=['--c1','--c2','--c3','--c4','--c5','--c6'];
+  const draw=D=>{
+    const rows=[...D.rows].sort((a,b)=>{const k=st.sortK,va=a[k]??'',vb=b[k]??'';
+      return (typeof va==='number'&&typeof vb==='number'?va-vb:String(va).localeCompare(String(vb)))*(st.sortD==='asc'?1:-1)});
+    root.innerHTML=`
+    <div class="page-head"><div><h1>Energy Analytics</h1><div class="sub">Explore consumption patterns, compare buildings, surface unusual usage and analyse cost.${DB.data.meta.sample?' Based on the labelled sample dataset.':''}</div></div>
+      <div class="head-actions"><button class="btn" data-action="an-csv">${I('dl',15)} Download filtered CSV</button></div></div>
+    <div class="card" style="margin-bottom:16px"><div class="card-b" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="width:210px"><label>Buildings</label>
+        <div class="dd"><button class="btn" data-action="an-bsel" style="width:100%;justify-content:space-between">${st.ids===null?'Campus total':st.ids.length+' selected'} ${I('chevD',14)}</button>
+        <div class="dd-panel" id="bsel-panel">
+          <label class="chk"><input type="checkbox" id="bsel-all" ${st.ids===null?'checked':''}/> Campus total (all buildings)</label>
+          ${bList.map(b=>`<label class="chk"><input type="checkbox" data-bid="${b.id}" ${st.ids&&st.ids.includes(b.id)?'checked':''}/> ${esc(b.name)}</label>`).join('')}
+          <div style="padding:7px 9px 3px"><button class="btn primary sm" data-action="an-bsel-apply" style="width:100%;justify-content:center">Apply</button></div>
+        </div></div></div>
+      <div><label>From</label><input type="date" id="an-from" value="${new Date(st.from).toISOString().slice(0,10)}" style="width:150px"/></div>
+      <div><label>To</label><input type="date" id="an-to" value="${new Date(st.to).toISOString().slice(0,10)}" style="width:150px"/></div>
+      <div><label>Granularity</label><div class="seg">${[['hour','Hourly'],['day','Daily'],['week','Weekly'],['month','Monthly']].map(([k,l])=>`<button data-action="an-bucket" data-b="${k}" class="${st.bucket===k?'active':''}">${l}</button>`).join('')}</div></div>
+      <button class="btn primary" data-action="an-apply">${I('refresh',15)} Apply</button>
+      <div style="flex:1"></div>
+      <div class="mono" style="font-size:12px;color:var(--muted)">Period total: <b style="color:var(--ink);font-size:14px">${nf(D.total)} kWh</b> · ${S().currency}${nf(D.total*S().rate)}</div>
+    </div></div>
+    <div class="card" style="margin-bottom:16px"><div class="card-h"><h3>${I('chart',16)} Consumption trend</h3><span class="hint">${st.bucket} buckets · kWh per bucket</span></div>
+      <div class="card-b"><div class="chart-box" id="ch-trend"></div>
+      <div class="legend">${D.series.map((s,i)=>`<span><i style="background:${cssv(colors[i%6])}"></i>${esc(bName(s.bid))}</span>`).join('')}</div></div></div>
+    <div class="grid" style="grid-template-columns:minmax(0,8fr) minmax(0,4fr)">
+      <div class="card"><div class="card-h"><h3>${I('building',16)} Building comparison</h3></div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr>
+          ${sortHeader('Building','name',st.sortK,st.sortD)}${sortHeader('Type','type',st.sortK,st.sortD)}
+          ${sortHeader('Total kWh','total',st.sortK,st.sortD)}${sortHeader('Share','share',st.sortK,st.sortD)}
+          ${sortHeader('Avg kW','avg',st.sortK,st.sortD)}${sortHeader('Peak kW','peak',st.sortK,st.sortD)}
+          ${sortHeader('kWh/m²','intensity',st.sortK,st.sortD)}${sortHeader('Cost','cost',st.sortK,st.sortD)}
+        </tr></thead><tbody>${rows.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td><span class="chip mut">${esc(r.type)}</span></td>
+          <td class="mono">${nf(r.total)}</td><td class="mono">${nf(r.share,1)}%</td>
+          <td class="mono">${nf(r.avg,1)}</td><td class="mono">${nf(r.peak,1)}</td>
+          <td class="mono">${r.area?nf(r.intensity,2):'—'}</td><td class="mono">${S().currency}${nf(r.cost)}</td></tr>`).join('')
+          ||`<tr><td colspan="8">${emptyBlock('building','No buildings match','Adjust the filter above.')}</td></tr>`}</tbody></table></div></div>
+      <div class="card"><div class="card-h"><h3>${I('warn',16)} Unusual usage</h3><span class="hint">z &gt; 3 vs same hour-of-week (14 d)</span></div>
+        <div class="card-b" style="padding-top:6px;padding-bottom:6px;max-height:380px;overflow-y:auto">
+          ${D.anomalies.slice(0,12).map(a=>`<div class="alert-row"><div class="a-ic" style="background:var(--accent-soft);color:var(--accent)">${I('warn',15)}</div>
+            <div style="min-width:0;font-size:12.5px"><div><b>${esc(a.building)}</b> — ${nf(a.v,1)} kWh at ${fmtT(a.t)}</div>
+            <div style="color:var(--muted);font-size:11px">${fmtD(a.t)} · typical ${nf(a.mean,1)} ± ${nf(a.sd,1)} · z=${a.z}</div></div></div>`).join('')
+            ||emptyBlock('check','Nothing unusual detected','Hourly readings are within expected variation.')}
+        </div>
+        <div class="card-b" style="border-top:1px solid var(--line)"><button class="btn sm" data-action="an-log">${I('bell',14)} Log these to alert history</button></div></div>
+    </div>`;
+    lineChart($('#ch-trend'),{height:290,series:D.series.map((s,i)=>({name:bName(s.bid),color:cssv(colors[i%6]),
+      points:s.points.map(p=>({x:p.t,y:p.v})),area:D.series.length===1&&st.bucket!=='hour'})),
+      yFmt:v=>nf(v),xFmt:v=>st.bucket==='hour'?fmtT(v):st.bucket==='month'?new Date(v).toLocaleDateString('en-US',{month:'short',year:'numeric'}):new Date(v).toLocaleDateString('en-US',{month:'short',day:'numeric'})});
+  };
+  await load();
+  register({
+    '__sort':t=>{const k=t.dataset.key;if(st.sortK===k)st.sortD=st.sortD==='asc'?'desc':'asc';else{st.sortK=k;st.sortD='asc'}load()},
+    'an-bsel':()=>$('#bsel-panel').classList.toggle('open'),
+    'an-bsel-apply':()=>{if($('#bsel-all')&&$('#bsel-all').checked){st.ids=null}
+      else{const on=$$('#bsel-panel input[data-bid]').filter(c=>c.checked).map(c=>c.dataset.bid);if(!on.length)return toast('Select at least one building or campus total.','warn');st.ids=on}load()},
+    'an-bucket':t=>{st.bucket=t.dataset.b;load()},
+    'an-apply':()=>{const f=parseWhen($('#an-from').value),t2=parseWhen($('#an-to').value+'T23:59');
+      if(isNaN(f)||isNaN(t2)||t2<=f)return toast('Please provide a valid date range (from before to).','err');
+      st.from=startOfDay(f);st.to=t2;load()},
+    'an-log':async()=>{const r=await api.request('POST','/alerts/scan',{query:{peakDays:0,anomDays:14}});
+      if(r.ok){toast(r.data.created?`${r.data.created} unusual-usage event(s) logged to alert history`:'No new anomalies to log');updateBell()}else toast(r.error,'err')},
+    'an-csv':()=>{if(!AD)return;const lines=['building_id,timestamp,kwh'];
+      AD.series.forEach(s=>s.points.forEach(p=>lines.push(`${s.bid},${new Date(p.t).toISOString()},${p.v??''}`)));
+      downloadFile(`analytics_${st.bucket}_${new Date(st.from).toISOString().slice(0,10)}.csv`,lines.join('\n'));toast('CSV downloaded')},
+  });
+};
+
+/* ================= PAGE 3 — LOAD FORECASTING ================= */
+PAGES.forecasting=async root=>{
+  const st=ST.forecasting;
+  const blds=await api.request('GET','/buildings/all');
+  const bList=blds.ok?blds.data:[];
+  let F=null,running=false;
+  const cached=await api.request('GET','/forecast/latest',{query:{buildingId:st.building,grain:st.grain}});
+  F=cached.ok?cached.data:null;
+  const draw=()=>{
+    root.innerHTML=`
+    <div class="page-head"><div><h1>Load Forecasting</h1><div class="sub">Holt-Winters (triple exponential smoothing) with weekly seasonality, fitted on stored hourly readings. Metrics below come from an honest backtest on a held-out period — they describe past performance on the ${DB.data.meta.sample?'sample':'stored'} data and are not a guarantee of future accuracy.</div></div>
+      <div class="head-actions"><button class="btn primary" id="fc-run" data-action="fc-run">${I('trend',15)} Run forecast</button></div></div>
+    <div class="card" style="margin-bottom:16px"><div class="card-b" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <div style="min-width:210px"><label>Building</label><select id="fc-b">
+        <option value="*" ${st.building==='*'?'selected':''}>Campus total (all buildings)</option>
+        ${bList.map(b=>`<option value="${b.id}" ${st.building===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
+      <div><label>Granularity</label><div class="seg">${[['hour','Hourly'],['day','Daily']].map(([k,l])=>`<button data-action="fc-grain" data-g="${k}" class="${st.grain===k?'active':''}">${l}</button>`).join('')}</div></div>
+      <div><label>Horizon</label><div class="seg">${(st.grain==='hour'?[[24,'24 h'],[48,'48 h'],[168,'7 days']]:[[7,'7 days'],[14,'14 days']]).map(([k,l])=>`<button data-action="fc-hz" data-h="${k}" class="${+st.horizon===k?'active':''}">${l}</button>`).join('')}</div></div>
+    </div></div>
+    ${!F?`<div class="card">${emptyBlock('trend','No forecast yet for this selection','Choose a building, granularity and horizon, then press “Run forecast”. The model trains on the stored reading history and reports honest backtest metrics.')}</div>`:`
+    <div class="card" style="margin-bottom:16px"><div class="card-h"><h3>${I('trend',16)} Actual vs predicted vs forecast</h3>
+      <span class="hint">${esc(F.buildingId==='*'?'Campus total':(bList.find(b=>b.id===F.buildingId)||{}).name||F.buildingId)} · trained ${fmtDT(F.createdAt)} · ${esc(F.unit||'kW')}</span></div>
+      <div class="card-b"><div class="chart-box" id="ch-fc"></div>
+      <div class="legend"><span><i style="background:${cssv('--c1')}"></i>Actual</span><span><i class="dash" style="color:${cssv('--c5')}"></i>Model fit (one-step)</span><span><i style="background:${cssv('--c3')}"></i>Forecast</span><span><i style="background:${cssv('--c3')};opacity:.4;height:10px"></i>~95% interval (holdout residuals)</span></div></div></div>
+    <div class="grid" style="grid-template-columns:minmax(0,4fr) minmax(0,8fr)">
+      <div class="card"><div class="card-h"><h3>${I('info',16)} Model evaluation</h3></div>
+        <div class="card-b"><div class="stat-mini" style="grid-template-columns:1fr 1fr">
+          <div class="sm"><b class="mono">${nf(F.metrics.mae,1)}</b><span>MAE (${esc(F.unit||'kW')})</span></div>
+          <div class="sm"><b class="mono">${nf(F.metrics.rmse,1)}</b><span>RMSE</span></div>
+          <div class="sm"><b class="mono">${nf(F.metrics.mape,1)}%</b><span>MAPE</span></div>
+          <div class="sm"><b class="mono">${nf(F.metrics.sd,1)}</b><span>Residual σ (holdout)</span></div>
+          <div class="sm"><b class="mono">${nf(F.metrics.naiveMae,1)}</b><span>Seasonal-naive MAE</span></div>
+          <div class="sm"><b class="mono">${F.metrics.skill>0?'+':''}${nf(F.metrics.skill,1)}%</b><span>Skill vs naive</span></div>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:12px">Backtest: trained on ${nf(F.metrics.trainPts)} points, evaluated on a held-out week (${F.metrics.testFrom?fmtD(F.metrics.testFrom):'—'} →). Parameters α=${F.metrics.params?F.metrics.params.al:'—'}, β=${F.metrics.params?F.metrics.params.be:'—'}, γ=${F.metrics.params?F.metrics.params.ga:'—'} selected by grid search minimising holdout MAE. These are <b>past</b> performance figures, not promises.</p></div></div>
+      ${st.grain==='hour'?
+      `<div class="card"><div class="card-h"><h3>${I('warn',16)} Predicted peak-demand periods</h3><span class="hint">forecast &gt; threshold ${nf(S().peakThreshold)} kW</span></div>
+        ${F.peaks&&F.peaks.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Window</th><th>Hours</th><th>Peak (kW)</th><th>Upper 95% (kW)</th><th>Excess (kWh)</th><th></th></tr></thead>
+        <tbody>${F.peaks.map(w=>`<tr><td>${fmtD(w.start)} · ${fmtT(w.start)}–${fmtT(w.end+HOUR)}</td><td class="mono">${w.h}</td><td class="mono"><b>${nf(w.peak,1)}</b></td><td class="mono">${nf(w.hiUpper,1)}</td><td class="mono">${nf(w.excess,1)}</td>
+        <td><button class="btn sm" data-action="fc-opt">Plan reduction</button></td></tr>`).join('')}</tbody></table></div>`
+        :`<div class="card-b">${emptyBlock('check','No peaks forecast','No forecast hour exceeds the configured threshold in this horizon.')}</div>`}</div>`
+      :`<div class="card"><div class="card-h"><h3>${I('cal',16)} Forecast peak day</h3></div><div class="card-b">
+        <div class="stat-mini"><div class="sm"><b class="mono">${F.peakDay?nf(F.peakDay.y,0):'—'}</b><span>kWh forecast</span></div>
+        <div class="sm"><b class="mono">${F.peakDay?fmtD(F.peakDay.t):'—'}</b><span>date of predicted maximum</span></div>
+        <div class="sm"><b class="mono">${F.peakDay?nf(F.peakDay.hi,0):'—'}</b><span>upper 95% (kWh)</span></div></div>
+        <p style="font-size:12px;color:var(--muted);margin-top:12px">Peak-demand detection in kW runs on the hourly model — switch granularity to “Hourly” to see predicted peak windows against the configured threshold.</p></div></div>`}
+    </div>
+    <div class="card" style="margin-top:16px"><div class="card-h"><h3>${I('info',16)} Model inputs & method</h3></div>
+      <div class="card-b"><ul class="assump">
+        <li><b>Input data:</b> hourly kWh readings stored in the database for the selected building (last 90 days), summed to campus total when “Campus total” is selected. Missing hours are linearly interpolated before fitting.</li>
+        <li><b>Method:</b> additive Holt-Winters — level + trend + ${st.grain==='hour'?'168-hour weekly':'7-day weekly'} seasonality. Only consumption history is used; no weather or occupancy data is available in this dataset.</li>
+        <li><b>Evaluation:</b> the final season of data is held out. Grid search picks (α, β, γ) by holdout MAE; the reported MAE/RMSE/MAPE and the 95% interval width come from that held-out backtest only.</li>
+        <li><b>Honesty notes:</b> all figures are computed from the ${DB.data.meta.sample?'simulated sample dataset':'stored readings'}; accuracy on real campus data will differ and must be re-measured after deployment.</li>
+      </ul></div></div>`}`;
+    if(F&&F.forecast&&F.forecast.length){
+      const hist=F.history||[],fit=F.fittedWin||[];
+      const hStart=hist.length?hist[0].t:F.forecast[0].t;
+      lineChart($('#ch-fc'),{height:300,threshold:st.grain==='hour'?S().peakThreshold:null,thresholdLabel:'threshold',
+        band:{points:F.forecast.map(f=>({x:f.t,y0:f.lo,y1:f.hi}))},
+        series:[
+          {name:'Actual',color:cssv('--c1'),points:hist.map(p=>({x:p.t,y:p.v}))},
+          {name:'Model fit',color:cssv('--c5'),dashed:true,width:1.4,points:fit.filter(p=>p.t>=hStart).map(p=>({x:p.t,y:p.y}))},
+          {name:'Forecast',color:cssv('--c3'),points:[...(hist.length?[{x:hist[hist.length-1].t,y:hist[hist.length-1].v}]:[]),...F.forecast.map(f=>({x:f.t,y:f.y}))]},
+        ],
+        yFmt:v=>nf(v),xFmt:v=>st.grain==='hour'?new Date(v).toLocaleDateString('en-US',{month:'short',day:'numeric'}):fmtD(v)});
+    }
+  };
+  draw();
+  const run=async()=>{
+    if(running)return;running=true;
+    const btn=$('#fc-run');if(btn){btn.disabled=true;btn.innerHTML=I('refresh',15)+' Fitting model…'}
+    st.building=$('#fc-b')?$('#fc-b').value:st.building;
+    const r=await api.request('POST','/forecast',{body:{buildingId:st.building,grain:st.grain,horizon:+st.horizon}});
+    running=false;
+    if(!r.ok){toast(r.error,'err');draw()}else{F=r.data;draw();toast(`Forecast ready — held-out MAE ${nf(F.metrics.mae,1)} ${F.unit}`)}
+  };
+  register({
+    'fc-run':run,
+    'fc-grain':t=>{st.grain=t.dataset.g;st.horizon=st.grain==='hour'?48:7;
+      api.request('GET','/forecast/latest',{query:{buildingId:st.building,grain:st.grain}}).then(r=>{F=r.ok?r.data:null;draw()})},
+    'fc-hz':t=>{st.horizon=+t.dataset.h;draw()},
+    'fc-opt':()=>go('#/optimization'),
+  });
+};
+
+/* ================= PAGE 4 — PEAK REDUCTION & OPTIMIZATION ================= */
+PAGES.optimization=async root=>{
+  const st=ST.optimization;
+  const priCls=p=>p==='High'?'err':p==='Medium'?'warn':'mut';
+  const stCls=s=>({pending:'mut',accepted:'info',completed:'ok',dismissed:'mut'}[s]||'mut');
+  const load=async()=>{
+    const r=await api.request('GET','/recommendations');
+    if(!r.ok)return errorState(root,r.error);
+    await draw(r.data);
+  };
+  const draw=async recsAll=>{
+    recsAll=recsAll||[];
+    const recs=recsAll.filter(r=>st.filter==='all'||r.status===st.filter);
+    const acted=recsAll.filter(r=>r.status==='accepted'||r.status==='completed');
+    const measKwh=recsAll.reduce((a,r)=>a+(r.measuredKwh||0),0);
+    const rate=S().rate;
+    const target=[...acted,...recsAll.filter(r=>r.status==='pending')].sort((a,b)=>b.windowPeak-a.windowPeak)[0];
+    let chart=null;
+    if(target){
+      const kwCut=recsAll.filter(r=>r.windowStart===target.windowStart&&(r.status==='accepted'||r.status==='completed')).reduce((a,r)=>a+r.kwRed,0);
+      const ser=await api.request('GET','/series',{query:{buildingId:'*',from:target.windowStart,to:target.windowEnd+HOUR,bucket:'hour'}});
+      if(ser.ok&&ser.data.some(p=>p.v!=null)){
+        chart={threshold:S().peakThreshold,
+          series:[
+            {name:'Baseline demand (kW)',color:cssv('--c4'),points:ser.data.map(p=>({x:p.t,y:p.v}))},
+            {name:`Optimised estimate${kwCut?` (−${nf(kwCut,1)} kW)`:''}`,color:cssv('--c1'),points:ser.data.map(p=>({x:p.t,y:p.v==null?null:+Math.max(2,p.v-kwCut).toFixed(2)}))},
+          ]};
+      }
+    }
+    root.innerHTML=`
+    <div class="page-head"><div><h1>Peak Reduction & Optimization</h1><div class="sub">Transparent, rule-based load-shifting recommendations. Savings shown are <b>estimates</b> (kW × hours × tariff) — they only become “measured” when you record actual metered reductions after implementation.</div></div>
+      <div class="head-actions"><div class="seg">
+        <button data-action="op-src" data-s="recent" class="${st.source==='recent'?'active':''}">From recent actuals</button>
+        <button data-action="op-src" data-s="forecast" class="${st.source==='forecast'?'active':''}">From latest forecast</button></div>
+        <button class="btn primary" id="op-detect-btn" data-action="op-detect">${I('zap',15)} Detect peaks &amp; recommend</button></div></div>
+    <div class="card" style="margin-bottom:16px"><div class="card-b stat-mini" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <div class="sm"><b class="mono">${nf(recsAll.filter(r=>r.status==='pending').reduce((a,r)=>a+r.estKwh,0),0)}</b><span>kWh est. reduction — pending</span></div>
+      <div class="sm"><b class="mono">${nf(acted.reduce((a,r)=>a+r.estKwh,0),0)}</b><span>kWh est. reduction — accepted/completed</span></div>
+      <div class="sm"><b class="mono">${S().currency}${nf(acted.reduce((a,r)=>a+r.estKwh,0)*rate)}</b><span>est. cost savings (estimated)</span></div>
+      <div class="sm"><b class="mono">${nf(measKwh,1)}</b><span>kWh <b>measured</b> savings</span></div>
+      <div class="sm"><b class="mono">${S().currency}${nf(measKwh*rate,2)}</b><span>measured cost savings</span></div>
+    </div></div>
+    ${chart?`<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>${I('chart',16)} Baseline vs estimated optimised demand</h3>
+      <span class="hint">window ${fmtDT(target.windowStart)} → ${fmtT(target.windowEnd+HOUR)} · peak ${nf(target.windowPeak,1)} kW</span></div>
+      <div class="card-b"><div class="chart-box" id="ch-opt"></div>
+      <div class="legend"><span><i style="background:${cssv('--c4')}"></i>Baseline (actual/forecast)</span><span><i style="background:${cssv('--c1')}"></i>Estimated optimised (accepted &amp; completed actions only)</span></div></div></div>`:''}
+    <div style="display:flex;gap:9px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <div class="seg">${[['all','All'],['pending','Pending'],['accepted','Accepted'],['completed','Completed'],['dismissed','Dismissed']].map(([k,l])=>`<button data-action="op-filter" data-f="${k}" class="${st.filter===k?'active':''}">${l}</button>`).join('')}</div>
+      <span style="font-size:12px;color:var(--muted)">${recs.length} recommendation${recs.length===1?'':'s'}</span></div>
+    <div class="card" style="margin-bottom:16px">${recs.length?recs.map(r=>`
+      <div class="rec-card"><div class="rec-rail" style="background:${r.priority==='High'?'var(--danger)':r.priority==='Medium'?'var(--accent)':'var(--line2)'}"></div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+          <b style="font-size:14px">${esc(r.title)}</b>
+          <span class="chip ${priCls(r.priority)}">${r.priority} priority</span>
+          <span class="chip ${stCls(r.status)}">${r.status}</span>
+          <span class="chip mut">${esc(r.difficulty)}</span></div>
+        <div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">${esc(r.detail)}</div>
+        <div style="font-size:11.5px;color:var(--muted)">${I('clock',12)} ${fmtD(r.windowStart)} · ${fmtT(r.windowStart)}–${fmtT(r.windowEnd+HOUR)} · building peak ${nf(r.windowPeak,1)} kW · ${esc(r.buildingLabel)} · source: ${esc(r.source)}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="mono" style="font-size:15px;font-weight:600">${nf(r.estKwh,1)} kWh</div>
+        <div style="font-size:11.5px;color:var(--muted)">≈ ${S().currency}${nf(r.estKwh*rate,2)} est.</div>
+        <div style="font-size:11.5px;color:var(--muted)">−${nf(r.kwRed,1)} kW</div>
+        ${r.measuredKwh!=null?`<div class="chip ok" style="margin-top:5px">measured ${nf(r.measuredKwh,1)} kWh</div>`:''}
+        <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;flex-wrap:wrap">
+          ${r.status==='pending'?`<button class="btn sm primary" data-action="op-accept" data-id="${r.id}">Accept</button>
+          <button class="btn sm" data-action="op-dismiss" data-id="${r.id}">Dismiss</button>`:''}
+          ${r.status==='accepted'?`<button class="btn sm primary" data-action="op-complete" data-id="${r.id}">Mark completed</button>
+          <button class="btn sm ghost" data-action="op-undo" data-id="${r.id}">Undo</button>`:''}
+          ${r.status==='completed'?`<button class="btn sm ghost" data-action="op-measure" data-id="${r.id}">${r.measuredKwh!=null?'Edit measured kWh':'Record measured kWh'}</button>`:''}
+        </div>
+      </div></div>`).join('')
+      :emptyBlock('sliders','Nothing here yet','Detect peak periods to generate recommendations, or adjust the status filter.')}</div>
+    <div class="card"><div class="card-h"><h3>${I('info',16)} How estimates are calculated</h3></div>
+      <div class="card-b"><ul class="assump">
+        <li><b>Peak detection:</b> any hour whose demand (actual or forecast) exceeds the configured threshold (${nf(S().peakThreshold)} kW, editable in Reports → Alerts &amp; Config) is flagged; consecutive hours form a window.</li>
+        <li><b>Energy estimate:</b> est. kWh = assumed kW reduction × window hours. E.g. EV: ${S().evCharging?nf(S().evKw*0.6,1):'0'} kW shifted × window length; HVAC: ≈45% of load × 12% trim; lighting: ≈4% of affected buildings' average load.</li>
+        <li><b>Cost estimate:</b> est. kWh × energy tariff (${S().currency}${nf(S().rate,3)}/kWh). Demand-charge savings (kW × ${S().currency}${nf(S().demandRate,2)}/kW-month) are <b>not</b> included and would be additional.</li>
+        <li><b>Estimated vs measured:</b> “estimated” figures are pre-implementation calculations with explicit assumptions. A recommendation only reports measured savings after you enter the actual metered reduction — until then nothing is claimed as achieved.</li>
+      </ul></div></div>`;
+    if(chart)lineChart($('#ch-opt'),{height:250,threshold:chart.threshold,thresholdLabel:'threshold',series:chart.series,yFmt:v=>nf(v,1)});
+  };
+  await load();
+  async function completeDlg(id){
+    const rec=DB.data.recs.find(r=>r.id===id);if(!rec)return;
+    const m=openModal({title:'Mark as completed',
+      body:`<p style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(rec.title)} — ${nf(rec.estKwh,1)} kWh estimated.</p>
+        <div class="field"><label>Measured reduction (kWh) — optional</label>
+        <input id="cm-kwh" type="number" min="0" step="0.1" value="${rec.measuredKwh??''}" placeholder="e.g. ${nf(rec.estKwh*0.8,1)}"/>
+        <div class="err-t">Must be a non-negative number.</div>
+        <p style="font-size:11.5px;color:var(--muted);margin-top:5px">Leave empty until you have actual meter data. Only values entered here count as <b>measured</b> savings anywhere in the app.</p></div>`,
+      footer:`<button class="btn" data-cancel>Cancel</button><button class="btn primary" id="cm-save">Save &amp; complete</button>`});
+    $('#cm-save',m.el).addEventListener('click',async()=>{
+      const v=$('#cm-kwh',m.el).value.trim();
+      if(v!==''&&(!Number.isFinite(+v)||+v<0)){$('.field',m.el).classList.add('bad');return}
+      const r=await api.request('PATCH','/recommendations/'+id,{body:{status:'completed',measuredKwh:v}});
+      m.close();if(r.ok){toast(v!==''?`Completed — ${nf(+v,1)} kWh recorded as measured`:'Completed — no measured value recorded yet');load()}else toast(r.error,'err');
+    });
+  }
+  register({
+    'op-src':t=>{st.source=t.dataset.s},
+    'op-filter':t=>{st.filter=t.dataset.f;load()},
+    'op-detect':async t=>{const b=$('#op-detect-btn')||t.closest('button');if(b){b.disabled=true;b.innerHTML=I('refresh',15)+' Detecting…'}
+      const r=await api.request('POST','/recommendations/detect',{body:{source:st.source}});
+      if(b){b.disabled=false;b.innerHTML=I('zap',15)+' Detect peaks & recommend'}
+      if(!r.ok)toast(r.error,'err');else{toast(`${r.data.count} recommendation(s) generated from ${r.data.label}`);load()}},
+    'op-accept':async t=>{const r=await api.request('PATCH','/recommendations/'+t.dataset.id,{body:{status:'accepted'}});r.ok?toast('Recommendation accepted — shown in the optimised-demand estimate'):toast(r.error,'err');load()},
+    'op-dismiss':async t=>{const r=await api.request('PATCH','/recommendations/'+t.dataset.id,{body:{status:'dismissed'}});r.ok?toast('Recommendation dismissed'):toast(r.error,'err');load()},
+    'op-undo':async t=>{const r=await api.request('PATCH','/recommendations/'+t.dataset.id,{body:{status:'pending'}});r.ok?toast('Moved back to pending'):toast(r.error,'err');load()},
+    'op-complete':t=>completeDlg(t.dataset.id),
+    'op-measure':t=>completeDlg(t.dataset.id),
+  });
+};
+
+/* ================= PAGE 5 — CAMPUS & DATA MANAGEMENT ================= */
+PAGES.campus=async root=>{
+  const st=ST.campus;
+  const tab=CURRENT.query.tab||'buildings';
+  const tabs=['buildings','records','import','quality'];
+  const drawTabs=()=>{
+    root.innerHTML=`<div class="tabs">${tabs.map(t=>`<button class="tab ${t===tab?'active':''}" data-action="cam-tab" data-t="${t}">${I({buildings:'building',records:'clock',import:'ul',quality:'check'}[t])} ${TABNAMES.campus[t]}</button>`).join('')}</div><div id="cam-body"></div>`;
+  };
+  const body=()=>$('#cam-body');
+  /* ---- buildings tab ---- */
+  const loadBuildings=async focusId=>{
+    const r=await api.request('GET','/buildings',{query:{search:st.q,sort:st.sortK,dir:st.sortD,page:st.page,pageSize:8}});
+    if(!r.ok)return errorState(body(),r.error);
+    const D=r.data;
+    body().innerHTML=`
+    <div class="card"><div class="card-h"><h3>${I('building',16)} Campus buildings</h3>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+        <input id="cb-q" placeholder="Search name or type…" value="${esc(st.q)}" style="width:200px;padding:7px 10px"/>
+        <button class="btn primary" data-action="cb-add">${I('plus',15)} Add building</button></div></div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr>
+        ${sortHeader('Name','name',st.sortK,st.sortD)}${sortHeader('Type','type',st.sortK,st.sortD)}
+        ${sortHeader('Area (m²)','area',st.sortK,st.sortD)}${sortHeader('Occupancy','occupancy',st.sortK,st.sortD)}
+        <th>HVAC</th><th>Equipment</th><th style="text-align:right">Actions</th>
+      </tr></thead><tbody>${D.items.map(b=>`<tr id="row-${b.id}"><td><b>${esc(b.name)}</b>${b.sample?' <span class="chip mut">sample</span>':''}</td>
+        <td><span class="chip mut">${esc(b.type)}</span></td><td class="mono">${nf(b.area)}</td><td class="mono">${nf(b.occupancy)}</td>
+        <td>${b.hvac?'<span class="chip ok">Yes</span>':'<span class="chip mut">No</span>'}</td>
+        <td style="max-width:220px;font-size:12px;color:var(--muted)">${esc((b.equipment||'').length>60?b.equipment.slice(0,59)+'…':b.equipment)}</td>
+        <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-action="cb-view" data-id="${b.id}">${I('eye',13)}</button>
+        <button class="btn sm" data-action="cb-edit" data-id="${b.id}">${I('pen',13)}</button>
+        <button class="btn sm" data-action="cb-del" data-id="${b.id}" style="color:var(--danger)">${I('trash',13)}</button></td></tr>`).join('')
+        ||`<tr><td colspan="7">${emptyBlock('building','No buildings found',st.q?'No match for “'+esc(st.q)+'”.':'Add your first building to start recording energy data.')}</td></tr>`}</tbody></table></div>
+      ${pagerHtml(D.page,D.pages,'cb-page')}</div>`;
+    const qi=$('#cb-q');if(qi)qi.addEventListener('input',debounce(()=>{st.q=qi.value;st.page=1;loadBuildings()},180));
+    if(focusId){const el=$('#row-'+focusId);if(el){el.scrollIntoView({block:'center'});el.classList.add('row-flash')}}
+  };
+  /* ---- records tab ---- */
+  const loadRecords=async()=>{
+    const q={buildingId:st.rB||undefined,page:st.rPage,pageSize:12};
+    if(st.rFrom)q.from=+parseWhen(st.rFrom);if(st.rTo)q.to=+parseWhen(st.rTo)+DAY;
+    const[rb,rbld]=await Promise.all([api.request('GET','/readings',{query:q}),api.request('GET','/buildings/all')]);
+    if(!rb.ok)return errorState(body(),rb.error);
+    const D=rb.data,bList=rbld.ok?rbld.data:[];
+    const bName=id=>(bList.find(b=>b.id===id)||{}).name||id;
+    body().innerHTML=`
+    <div class="card"><div class="card-h"><h3>${I('clock',16)} Energy records</h3>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+        <select id="cr-b" style="width:170px"><option value="">All buildings</option>${bList.map(b=>`<option value="${b.id}" ${st.rB===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
+        <input type="date" id="cr-from" value="${st.rFrom}" style="width:140px"/><input type="date" id="cr-to" value="${st.rTo}" style="width:140px"/>
+        <button class="btn" data-action="cr-filter">Filter</button>
+        <button class="btn primary" data-action="cr-add">${I('plus',15)} Add reading</button></div></div>
+      <div style="padding:8px 17px;font-size:12px;color:var(--muted)">${nf(D.total)} record${D.total===1?'':'s'} in filter</div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Building</th><th>Timestamp</th><th>kWh</th><th style="text-align:right">Actions</th></tr></thead>
+      <tbody>${D.items.map(r=>`<tr><td>${esc(bName(r.b))}</td><td class="mono">${fmtDT(r.ts)}</td><td class="mono"><b>${nf(r.kwh,1)}</b></td>
+        <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-action="cr-edit" data-id="${r.id}">${I('pen',13)}</button>
+        <button class="btn sm" data-action="cr-del" data-id="${r.id}" style="color:var(--danger)">${I('trash',13)}</button></td></tr>`).join('')
+        ||`<tr><td colspan="4">${emptyBlock('clock','No readings found','Add a reading or widen the filter.')}</td></tr>`}</tbody></table></div>
+      ${pagerHtml(D.page,D.pages,'cr-page')}</div>`;
+  };
+  /* ---- import tab ---- */
+  const loadImport=()=>{
+    body().innerHTML=`
+    <div class="grid" style="grid-template-columns:minmax(0,7fr) minmax(0,5fr)">
+      <div class="card"><div class="card-h"><h3>${I('ul',16)} Upload CSV readings</h3></div><div class="card-b">
+        <div class="drop-zone" id="dz">${I('ul',30)}<div style="margin-top:8px"><b>Drop a CSV file here</b> or click to browse</div>
+          <div style="font-size:12px;margin-top:4px">Columns: <span class="mono">building_id</span> (or <span class="mono">building_name</span>), <span class="mono">timestamp</span>, <span class="mono">kwh</span></div></div>
+        <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none"/>
+        <div id="csv-result" style="margin-top:14px"></div>
+      </div></div>
+      <div class="card"><div class="card-h"><h3>${I('file',16)} Template &amp; rules</h3></div><div class="card-b">
+        <button class="btn" data-action="ci-template">${I('dl',15)} Download sample CSV template</button>
+        <ul class="assump" style="margin-top:14px">
+          <li><b>Validation:</b> rows are checked for a known building, a parseable timestamp and a non-negative kWh value; invalid rows are rejected with the row number and reason.</li>
+          <li><b>Duplicates:</b> a row is skipped if that building already has a reading for the same hour — either in the database or earlier in the same file.</li>
+          <li><b>Timestamps:</b> <span class="mono">YYYY-MM-DD HH:MM</span> (or ISO). Values are snapped to the hour.</li>
+          <li>Imported readings appear immediately across Dashboard, Analytics and Forecasting.</li>
+        </ul></div></div>
+    </div>`;
+    const dz=$('#dz'),fi=$('#csv-file');
+    dz.addEventListener('click',()=>fi.click());
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
+    dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+    dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0])});
+    fi.addEventListener('change',()=>{if(fi.files[0])handleFile(fi.files[0])});
+    async function handleFile(file){
+      const text=await file.text();
+      const rows=parseCSV(text);
+      if(rows.length<2){$('#csv-result').innerHTML=`<div class="chip err">The file appears to be empty or has no data rows.</div>`;return}
+      const hdr=rows[0].map(h=>h.trim().toLowerCase());
+      const pick=names=>{for(const n of names){const i=hdr.indexOf(n);if(i>=0)return i}return -1};
+      const ci=pick(['building_id','buildingid','id']),ni=pick(['building_name','name','building']),ti=pick(['timestamp','time','date_time','datetime']),ki=pick(['kwh','energy_kwh','consumption_kwh','value']);
+      if(ti<0||ki<0||(ci<0&&ni<0)){$('#csv-result').innerHTML=`<div class="chip err">Missing required columns. Need building_id (or building_name), timestamp and kwh. Download the template for the exact format.</div>`;return}
+      const objs=rows.slice(1).map(r=>({building_id:ci>=0?r[ci]:'',building_name:ni>=0?r[ni]:'',timestamp:ti>=0?r[ti]:'',kwh:ki>=0?r[ki]:''}));
+      $('#csv-result').innerHTML=`<div class="chip info">Parsed ${objs.length} data row(s). Ready to validate.</div>`;
+      const btn=document.createElement('button');btn.className='btn primary';btn.style.marginTop='10px';btn.textContent=`Validate & import ${objs.length} row${objs.length===1?'':'s'}`;
+      $('#csv-result').appendChild(btn);
+      btn.addEventListener('click',async()=>{
+        btn.disabled=true;btn.textContent='Importing…';
+        const r=await api.request('POST','/readings/import',{body:{rows:objs}});
+        if(!r.ok){$('#csv-result').innerHTML=`<div class="chip err">${esc(r.error)}</div>`;return}
+        const D=r.data;
+        $('#csv-result').innerHTML=`
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <span class="chip ok">${D.imported} imported</span>
+            ${D.dupCount?`<span class="chip warn">${D.dupCount} duplicate(s) skipped</span>`:''}
+            ${D.errorCount?`<span class="chip err">${D.errorCount} error(s)</span>`:`<span class="chip ok">no errors</span>`}</div>
+          ${D.duplicates.length?`<b style="font-size:12.5px">Duplicates (first ${D.duplicates.length})</b><div style="font-size:12px;color:var(--muted);margin:4px 0 10px">${D.duplicates.map(d=>`Row ${d.row}: ${esc(d.msg)}`).join('<br>')}</div>`:''}
+          ${D.errors.length?`<b style="font-size:12.5px">Errors (first ${D.errors.length})</b><div class="tbl-wrap" style="margin-top:4px"><table class="tbl" style="min-width:0"><tbody>${D.errors.map(e=>`<tr><td class="mono" style="width:60px">Row ${e.row}</td><td style="color:var(--danger);font-size:12px">${esc(e.msg)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+        toast(`${D.imported} reading(s) imported${D.dupCount?`, ${D.dupCount} duplicate(s) skipped`:''}${D.errorCount?`, ${D.errorCount} row(s) rejected`:''}`,D.errorCount?'warn':'ok');
+      });
+    }
+  };
+  /* ---- quality tab ---- */
+  const loadQuality=async()=>{
+    const r=await api.request('GET','/quality');
+    if(!r.ok)return errorState(body(),r.error);
+    const rows=r.data,warn=rows.filter(x=>x.missing>0||x.coverage<80);
+    body().innerHTML=`
+    <div class="card" style="margin-bottom:16px"><div class="card-h"><h3>${I('check',16)} Data quality summary</h3>
+      <span class="hint">coverage = % of expected hours with readings over the last 30 days · missing = hours without data in the last 7 days</span></div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Building</th><th>Records</th><th>First reading</th><th>Latest reading</th><th>30-day coverage</th><th>Missing (7 d)</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td class="mono">${nf(x.records)}</td>
+        <td class="mono">${x.first?fmtD(x.first):'—'}</td><td class="mono">${x.last?fmtDT(x.last):'—'}</td>
+        <td class="mono">${x.coverage}%</td><td class="mono">${x.missing?`<b style="color:var(--accent)">${x.missing} h</b>`:'0 h'}</td>
+        <td>${x.coverage>=80&&x.missing===0?'<span class="chip ok">Good</span>':x.missing>0?'<span class="chip warn">Gaps in last 7 days</span>':'<span class="chip warn">Low coverage</span>'}</td></tr>`).join('')}</tbody></table></div></div>
+    ${warn.length?`<div class="card"><div class="card-h"><h3>${I('warn',16)} Missing-data warnings</h3></div><div class="card-b">
+      ${warn.map(x=>`<div class="alert-row"><div class="a-ic" style="background:var(--accent-soft);color:var(--accent)">${I('warn',15)}</div>
+      <div style="font-size:13px"><b>${esc(x.name)}</b> — ${x.missing>0?`${x.missing} hour(s) without readings in the last 7 days. `:''}${x.coverage<80?`Only ${x.coverage}% coverage over the last 30 days; forecasts and analytics will be less reliable until gaps are filled (import via CSV or add readings manually).`:''}</div></div>`).join('')}
+    </div></div>`:`<div class="card"><div class="card-b">${emptyBlock('check','All buildings look healthy','No missing-hour warnings for the last 7 days.')}</div></div>`}`;
+  };
+  /* ---- building form ---- */
+  function buildingForm(id){
+    const b=id?DB.data.buildings.find(x=>x.id===id):null;
+    const m=openModal({title:b?'Edit building':'Add building',wide:true,
+      body:`<div class="form-grid">
+        <div class="field"><label>Name *</label><input id="bf-name" value="${esc(b?b.name:'')}"/><div class="err-t"></div></div>
+        <div class="field"><label>Type</label><select id="bf-type">${['Academic','Laboratory','Library','Residence','Athletic','Dining','Other'].map(t=>`<option ${b&&b.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="field"><label>Area (m²) *</label><input id="bf-area" type="number" min="1" value="${b?b.area:''}"/><div class="err-t"></div></div>
+        <div class="field"><label>Peak occupancy</label><input id="bf-occ" type="number" min="0" value="${b?b.occupancy:0}"/><div class="err-t"></div></div>
+        <div class="field"><label>Controllable load (kW)</label><input id="bf-ck" type="number" min="0" step="0.1" value="${b?b.controllableKw:0}"/><div class="err-t"></div>
+          <p style="font-size:11px;color:var(--muted);margin-top:3px">Schedulable equipment (ovens, rigs) usable for load-shifting recommendations.</p></div>
+        <div class="field"><label>HVAC metered here</label><select id="bf-hvac"><option value="1" ${b&&b.hvac?'selected':''}>Yes</option><option value="0" ${b&&b.hvac?'':'selected'}>No</option></select></div>
+      </div>
+      <div class="field"><label>Equipment details</label><textarea id="bf-eq" rows="2">${esc(b?b.equipment:'')}</textarea></div>
+      <div class="field" style="margin-bottom:0"><label>Notes</label><textarea id="bf-notes" rows="2">${esc(b?b.notes:'')}</textarea></div>`,
+      footer:`<button class="btn" data-cancel>Cancel</button><button class="btn primary" id="bf-save">${b?'Save changes':'Create building'}</button>`});
+    $('#bf-save',m.el).addEventListener('click',async()=>{
+      $$('.field',m.el).forEach(f=>f.classList.remove('bad'));
+      const payload={name:$('#bf-name',m.el).value,type:$('#bf-type',m.el).value,area:$('#bf-area',m.el).value,
+        occupancy:+$('#bf-occ',m.el).value||0,controllableKw:$('#bf-ck',m.el).value,hvac:$('#bf-hvac',m.el).value==='1',
+        equipment:$('#bf-eq',m.el).value,notes:$('#bf-notes',m.el).value};
+      const r=await api.request(b?'PUT':'POST',b?'/buildings/'+id:'/buildings',{body:payload});
+      if(!r.ok){const msg=r.error;const f=$$('.field',m.el)[0];f.classList.add('bad');f.querySelector('.err-t').textContent=msg;
+        if(!/name/i.test(msg))toast(msg,'err');return}
+      m.close();toast(b?'Building updated':'Building created — add readings or import CSV data for it');loadBuildings();
+    });
+  }
+  function readingForm(id){
+    const r=id?DB.data.readings.find(x=>x.id===id):null;
+    api.request('GET','/buildings/all').then(rb=>{
+      const bList=rb.ok?rb.data:[];
+      const m=openModal({title:r?'Edit reading':'Add reading',
+        body:`<div class="field"><label>Building *</label><select id="rf-b">${bList.map(b=>`<option value="${b.id}" ${r&&r.b===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Timestamp * (snapped to the hour)</label><input id="rf-ts" type="datetime-local" value="${tsInput(r?r.ts:floorHour(Date.now()))}"/><div class="err-t"></div></div>
+        <div class="field"><label>Consumption (kWh) *</label><input id="rf-kwh" type="number" min="0" step="0.1" value="${r?r.kwh:''}"/><div class="err-t"></div></div>`,
+        footer:`<button class="btn" data-cancel>Cancel</button><button class="btn primary" id="rf-save">${r?'Save changes':'Add reading'}</button>`});
+      $('#rf-save',m.el).addEventListener('click',async()=>{
+        $$('.field',m.el).forEach(f=>f.classList.remove('bad'));
+        const payload={buildingId:$('#rf-b',m.el).value,timestamp:$('#rf-ts',m.el).value,kwh:$('#rf-kwh',m.el).value};
+        const res=await api.request(r?'PUT':'POST',r?'/readings/'+id:'/readings',{body:payload});
+        if(!res.ok){const bad=/kwh/i.test(res.error)?2:/building/i.test(res.error)?0:1;
+          const f=$$('.field',m.el)[bad]||$$('.field',m.el)[1];f.classList.add('bad');f.querySelector('.err-t').textContent=res.error;toast(res.error,'err');return}
+        m.close();toast(r?'Reading updated':'Reading added');
+        if(CURRENT.path==='campus'&&(!CURRENT.query.tab||CURRENT.query.tab==='records'))loadRecords();
+        else renderApp();
+      });
+    });
+  }
+  drawTabs();
+  if(tab==='buildings')await loadBuildings(CURRENT.query.focus);
+  else if(tab==='records')await loadRecords();
+  else if(tab==='import')loadImport();
+  else await loadQuality();
+  register({
+    'cam-tab':t=>{setQuery({tab:t.dataset.t,focus:''});PAGES.campus(root)},
+    'cb-page':t=>{st.page=+t.dataset.p;loadBuildings()},
+    'cb-add':()=>buildingForm(null),
+    'cb-edit':t=>buildingForm(t.dataset.id),
+    'cb-view':t=>{const b=DB.data.buildings.find(x=>x.id===t.dataset.id);if(!b)return;
+      openModal({title:esc(b.name),body:`<div class="stat-mini" style="margin-bottom:14px">
+        <div class="sm"><b>${esc(b.type)}</b><span>type</span></div><div class="sm"><b class="mono">${nf(b.area)} m²</b><span>area</span></div>
+        <div class="sm"><b class="mono">${nf(b.occupancy)}</b><span>peak occupancy</span></div>
+        <div class="sm"><b class="mono">${b.controllableKw?nf(b.controllableKw,1)+' kW':'—'}</b><span>controllable load</span></div></div>
+        <p style="font-size:13px;margin-bottom:6px"><b>Equipment:</b> ${esc(b.equipment)||'—'}</p>
+        <p style="font-size:13px"><b>Notes:</b> ${esc(b.notes)||'—'}</p>`})},
+    'cb-del':async t=>{const b=DB.data.buildings.find(x=>x.id===t.dataset.id);if(!b)return;
+      if(await confirmDlg({title:'Delete building?',message:`“${esc(b.name)}” and all of its energy readings will be permanently deleted.`,okText:'Delete',danger:true})){
+        const r=await api.request('DELETE','/buildings/'+b.id);if(r.ok){toast('Building deleted');loadBuildings()}else toast(r.error,'err')}},
+    'cr-page':t=>{st.rPage=+t.dataset.p;loadRecords()},
+    'cr-filter':()=>{st.rB=$('#cr-b').value;st.rFrom=$('#cr-from').value;st.rTo=$('#cr-to').value;st.rPage=1;loadRecords()},
+    'cr-add':()=>readingForm(null),
+    'cr-edit':t=>readingForm(t.dataset.id),
+    'cr-del':async t=>{if(await confirmDlg({title:'Delete reading?',message:'This energy record will be permanently removed.',okText:'Delete',danger:true})){
+      const r=await api.request('DELETE','/readings/'+t.dataset.id);if(r.ok){toast('Reading deleted');if(CURRENT.path==='campus'&&(!CURRENT.query.tab||CURRENT.query.tab==='records'))loadRecords();else renderApp();}else toast(r.error,'err')}},
+    'ci-template':()=>{const first=DB.data.buildings[0];
+      const lines=['building_id,building_name,timestamp,kwh'];
+      if(first){lines.push(`${first.id},${first.name},2025-06-01 08:00,38.4`);lines.push(`${first.id},${first.name},2025-06-01 09:00,45.1`)}
+      downloadFile('campusgrid_readings_template.csv',lines.join('\n'));
+      toast('Sample template downloaded')},
+    '__sort':t=>{const k=t.dataset.key;if(st.sortK===k)st.sortD=st.sortD==='asc'?'desc':'asc';else{st.sortK=k;st.sortD='asc'}loadBuildings()},
+  });
+};
+
+/* ================= PAGE 6 — REPORTS, ALERTS & SETTINGS ================= */
+PAGES.reports=async root=>{
+  const tab=CURRENT.query.tab||'reports';
+  const tabs=['reports','alerts','settings','info'];
+  let rep=null;
+  const drawTabs=()=>{root.innerHTML=`<div class="tabs">${tabs.map(t=>`<button class="tab ${t===tab?'active':''}" data-action="rep-tab" data-t="${t}">${I({reports:'file',alerts:'bell',settings:'gear',info:'info'}[t])} ${TABNAMES.reports[t]}</button>`).join('')}</div><div id="rep-body"></div>`};
+  const body=()=>$('#rep-body');
+  /* ---- reports tab ---- */
+  const drawReports=()=>{
+    const today=new Date().toISOString().slice(0,10);
+    body().innerHTML=`
+    <div class="grid" style="grid-template-columns:minmax(0,4fr) minmax(0,8fr)">
+      <div class="card"><div class="card-h"><h3>${I('cal',16)} Generate report</h3></div><div class="card-b">
+        <div class="field"><label>Period type</label><select id="rp-period"><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select></div>
+        <div class="field"><label>Reference date</label><input type="date" id="rp-date" value="${today}"/></div>
+        <button class="btn primary" data-action="rp-gen" style="width:100%;justify-content:center">${I('file',15)} Generate</button>
+        <p style="font-size:11.5px;color:var(--muted);margin-top:10px">Daily = that calendar day · Weekly = Mon–Sun containing the date · Monthly = calendar month.</p></div></div>
+      <div id="rp-out" class="card"><div class="card-b">${emptyBlock('file','No report generated yet','Choose a period and press Generate.')}</div></div>
+    </div>`;
+  };
+  const renderReport=()=>{
+    if(!rep)return;
+    $('#rp-out').innerHTML=`
+      <div class="card-h"><h3>${I('file',16)} ${rep.label} energy report — ${fmtD(rep.from)} → ${fmtD(rep.to-1)}</h3>
+        <div style="display:flex;gap:8px"><button class="btn sm" data-action="rp-csv">${I('dl',14)} CSV</button>
+        <button class="btn sm" data-action="rp-print">${I('printer',14)} Print / PDF</button></div></div>
+      <div class="card-b"><div class="stat-mini" style="margin-bottom:14px">
+        <div class="sm"><b class="mono">${nf(rep.campus.kwh)}</b><span>campus kWh</span></div>
+        <div class="sm"><b class="mono">${S().currency}${nf(rep.campus.cost)}</b><span>energy cost</span></div>
+        <div class="sm"><b class="mono">${nf(rep.campus.peak,1)} kW</b><span>peak demand</span></div>
+        <div class="sm"><b class="mono">${rep.campus.windows}</b><span>hours over threshold</span></div></div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Building</th><th>Type</th><th>kWh</th><th>Share</th><th>Cost</th><th>Peak kW</th></tr></thead>
+      <tbody>${rep.buildings.map(b=>`<tr><td>${esc(b.name)}</td><td><span class="chip mut">${esc(b.type)}</span></td><td class="mono">${nf(b.kwh)}</td>
+        <td class="mono">${nf(b.share,1)}%</td><td class="mono">${S().currency}${nf(b.cost,2)}</td><td class="mono">${nf(b.peak,1)}</td></tr>`).join('')}</tbody></table></div>
+      <p style="font-size:11.5px;color:var(--muted);margin-top:10px">Costs use the energy tariff only (${S().currency}${nf(rep.rate,3)}/kWh); demand charges not included. Estimated savings from accepted recommendations are excluded from these actuals.</p></div>`;
+  };
+  /* ---- alerts & config tab ---- */
+  const loadAlerts=async()=>{
+    const[ra,rs]=await Promise.all([api.request('GET','/alerts'),api.request('GET','/settings')]);
+    if(!ra.ok)return errorState(body(),ra.error);
+    const s=rs.ok?rs.data:S(),items=ra.data.items;
+    const sel=$('#af-sel');const filt=sel?sel.value:'all';
+    const shown=items.filter(a=>filt==='all'||(filt==='unread'?!a.read:a.type===filt));
+    body().innerHTML=`
+    <div class="grid" style="grid-template-columns:minmax(0,4fr) minmax(0,8fr)">
+      <div>
+        <div class="card" style="margin-bottom:16px"><div class="card-h"><h3>${I('gear',16)} Thresholds &amp; tariffs</h3></div><div class="card-b">
+          <div class="field"><label>Peak-demand threshold (kW)</label><input id="cf-th" type="number" min="1" value="${s.peakThreshold}"/><div class="err-t"></div></div>
+          <div class="field"><label>Energy tariff (${s.currency}/kWh)</label><input id="cf-rate" type="number" min="0" step="0.001" value="${s.rate}"/><div class="err-t"></div></div>
+          <div class="field"><label>Demand charge (${s.currency}/kW-month)</label><input id="cf-dem" type="number" min="0" step="0.01" value="${s.demandRate}"/><div class="err-t"></div></div>
+          <button class="btn primary" data-action="cf-save" style="width:100%;justify-content:center">Save configuration</button>
+        </div></div>
+        <div class="card"><div class="card-h"><h3>${I('zap',16)} Run checks</h3></div><div class="card-b">
+          <button class="btn" data-action="al-scan" style="width:100%;justify-content:center">${I('refresh',15)} Scan peaks (7 d) &amp; anomalies (14 d)</button>
+          <p style="font-size:11.5px;color:var(--muted);margin-top:8px">Creates alert records for threshold exceedances and unusual consumption. Deduplicated per day.</p>
+        </div></div>
+      </div>
+      <div class="card"><div class="card-h"><h3>${I('bell',16)} Alert history</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="af-sel" style="width:150px"><option value="all">All types</option><option value="peak">Peak demand</option><option value="anomaly">Unusual usage</option><option value="unread">Unread only</option></select>
+          <button class="btn sm" data-action="al-readall">Mark all read</button></div></div>
+        <div class="card-b" style="padding-top:6px;padding-bottom:6px;max-height:560px;overflow-y:auto">
+        ${shown.map(a=>`<div class="alert-row" style="opacity:${a.read?'.6':'1'}">
+          <div class="a-ic" style="background:${a.type==='peak'?'var(--danger-soft)':'var(--accent-soft)'};color:${a.type==='peak'?'var(--danger)':'var(--accent)'}">${I(a.type==='peak'?'zap':'warn',15)}</div>
+          <div style="flex:1;min-width:0;font-size:12.5px"><div>${esc(a.message)}</div>
+          <div style="color:var(--muted);font-size:11px;margin-top:2px">${fmtDT(a.ts)} · <span class="chip ${a.severity==='high'?'err':a.severity==='medium'?'warn':'mut'}" style="font-size:10px">${a.severity}</span></div></div>
+          ${!a.read?`<button class="btn sm ghost" data-action="al-read" data-id="${a.id}">Mark read</button>`:''}
+          <button class="btn sm ghost" data-action="al-del" data-id="${a.id}" style="color:var(--danger)">${I('trash',13)}</button></div>`).join('')
+          ||emptyBlock('bell','No alerts match','Run a scan or adjust the filter.')}</div></div>
+    </div>`;
+    $('#af-sel').value=filt;
+    $('#af-sel').addEventListener('change',loadAlerts);
+  };
+  /* ---- settings tab ---- */
+  const loadSettings=async()=>{
+    const rs=await api.request('GET','/settings');
+    if(!rs.ok)return errorState(body(),rs.error);
+    const s=rs.data;
+    body().innerHTML=`
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="card"><div class="card-h"><h3>${I('building',16)} Campus details</h3></div><div class="card-b">
+        <div class="field"><label>Campus name</label><input id="st-name" value="${esc(s.campusName)}"/></div>
+        <div class="field"><label>Location</label><input id="st-loc" value="${esc(s.location)}"/></div>
+        <div class="form-grid">
+          <div class="field"><label>Currency symbol</label><input id="st-cur" value="${esc(s.currency)}" maxlength="4"/></div>
+          <div class="field"><label>User name</label><input id="st-user" value="${esc(s.userName)}"/></div>
+          <div class="field"><label>Role</label><input id="st-role" value="${esc(s.role)}"/></div>
+        </div></div></div>
+      <div class="card"><div class="card-h"><h3>${I('sliders',16)} Preferences</h3></div><div class="card-b">
+        <div class="field"><label>Theme</label><div class="seg" id="st-theme">
+          <button data-v="light" class="${s.theme==='light'?'active':''}">Light</button>
+          <button data-v="dark" class="${s.theme==='dark'?'active':''}">Dark</button></div></div>
+        <div class="field"><label>Reduce motion</label><div class="seg" id="st-motion">
+          <button data-v="0" class="${!s.reduceMotion?'active':''}">Normal</button>
+          <button data-v="1" class="${s.reduceMotion?'active':''}">Reduced</button></div></div>
+        <div class="field"><label>EV charging load present on campus</label><div class="seg" id="st-ev">
+          <button data-v="1" class="${s.evCharging?'active':''}">Yes</button>
+          <button data-v="0" class="${!s.evCharging?'active':''}">No</button></div></div>
+        <div class="field"><label>EV peak load (kW)</label><input id="st-evkw" type="number" min="0" value="${s.evKw}"/></div>
+        <button class="btn primary" data-action="st-save" style="width:100%;justify-content:center">Save settings</button>
+        <button class="btn" data-action="st-reset" style="width:100%;justify-content:center;margin-top:9px;color:var(--danger)">Reset &amp; reseed sample data</button>
+      </div></div>
+    </div>`;
+    let theme=s.theme,motion=s.reduceMotion?1:0,ev=s.evCharging?1:0;
+    $('#st-theme').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;theme=b.dataset.v;$$('#st-theme button').forEach(x=>x.classList.toggle('active',x===b))});
+    $('#st-motion').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;motion=+b.dataset.v;$$('#st-motion button').forEach(x=>x.classList.toggle('active',x===b))});
+    $('#st-ev').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;ev=+b.dataset.v;$$('#st-ev button').forEach(x=>x.classList.toggle('active',x===b))});
+    register({'st-save':async()=>{ // merged into ACTIONS — all other handlers stay alive
+      const r=await api.request('PUT','/settings',{body:{campusName:$('#st-name').value,location:$('#st-loc').value,currency:$('#st-cur').value,
+        userName:$('#st-user').value,role:$('#st-role').value,theme,reduceMotion:!!motion,evCharging:!!ev,evKw:$('#st-evkw').value}});
+      if(!r.ok)return toast(r.error,'err');
+      applyTheme();renderChrome();toast('Settings saved — they persist across refreshes');
+    }});
+  };
+  /* ---- info tab ---- */
+  const loadInfo=()=>{
+    body().innerHTML=`<div class="card doc"><div class="card-h"><h3>${I('info',16)} Project information</h3></div><div class="card-b">
+      <h4 style="margin-top:0">Campus Energy Load Forecasting &amp; Peak Reduction System</h4>
+      <p>A campus energy management application: it stores building-level electricity readings, forecasts demand with a transparent statistical model, detects peak-demand periods against a configurable threshold, and proposes rule-based load-shifting actions with explicitly estimated savings.</p>
+      <h4>Objectives</h4><ul>
+        <li>Maintain a single source of truth for campus buildings and hourly energy readings (manual entry + CSV import with validation and duplicate detection).</li>
+        <li>Forecast hourly and daily demand using Holt-Winters triple exponential smoothing, with honest hold-out evaluation (MAE / RMSE / MAPE / skill vs seasonal-naive).</li>
+        <li>Detect peak-demand windows and generate prioritised, rule-based recommendations: EV charging shifts, lab equipment scheduling, HVAC optimisation and lighting trims.</li>
+        <li>Track recommendations through accept → complete, separating <b>estimated</b> savings (kW × hours × tariff, assumptions stated) from <b>measured</b> savings (entered only after real meter verification).</li></ul>
+      <h4>Architecture</h4>
+      <p>Three cleanly separated layers in this build: a UI layer (six routed pages), a simulated REST-style API layer with validation and typed errors, and a persistent browser-storage layer (buildings, readings, forecasts, recommendations, alerts, settings) that survives refresh. <b>This is not a real server or database</b> — persistence uses localStorage and the API runs in-page; the conventional API boundary means the storage layer can later be swapped for Express + SQLite/PostgreSQL without touching the pages.</p>
+      <h4>Forecasting method</h4>
+      <p>Additive Holt-Winters (level, trend, weekly seasonality; m=168 for hourly, m=7 for daily). The final season of history is held out; (α, β, γ) are chosen by a 27-point grid search minimising hold-out MAE, and the 95% forecast interval uses the hold-out residual standard deviation. No accuracy is claimed beyond what the backtest on the stored (currently sample) data shows, and no weather/occupancy data is used because none is collected yet.</p>
+      <h4>Data disclaimer</h4>
+      <p>${DB.data.meta.sample?'The current dataset is <b>labelled sample data</b> generated for demonstration — profiles simulate academic, laboratory, residential, athletic and dining load shapes with noise, hot-day effects and rare spikes.':'The dataset contains user-supplied readings.'} Replace it via Campus &amp; Data → CSV Import or Reset &amp; reseed in Settings.</p>
+      <h4>Key assumptions used in savings estimates</h4><ul>
+        <li>Energy cost = kWh × flat tariff; demand-charge savings reported separately and not silently folded in.</li>
+        <li>EV shift moves ~60% of configured EV peak load overnight; lab shift assumes 70% of declared controllable load; HVAC assumes 45% of building load with a 12% window trim; lighting assumes ~4% of affected buildings' average load.</li>
+        <li>Estimated savings become “measured” only when a metered value is recorded against a completed recommendation.</li></ul>
+    </div></div>`;
+  };
+  drawTabs();
+  if(tab==='reports')drawReports();else if(tab==='alerts')await loadAlerts();else if(tab==='settings')await loadSettings();else loadInfo();
+  register({
+    'rep-tab':t=>{setQuery({tab:t.dataset.t});PAGES.reports(root)},
+    'rp-gen':async()=>{
+      const period=$('#rp-period').value,date=$('#rp-date').value;
+      const r=await api.request('GET','/report',{query:{period,date}});
+      if(!r.ok)return toast(r.error,'err');
+      rep=r.data;renderReport();toast(`${rep.label} report generated`)},
+    'rp-csv':()=>{if(!rep)return;const L=[`# ${rep.label} energy report ${fmtD(rep.from)} - ${fmtD(rep.to-1)}`,
+      `# campus_kwh,${rep.campus.kwh},campus_cost,${rep.campus.cost},peak_kw,${rep.campus.peak},hours_over_threshold,${rep.campus.windows}`,
+      'building,type,kwh,share_pct,cost,peak_kw',
+      ...rep.buildings.map(b=>[csvCell(b.name),b.type,b.kwh,b.share,b.cost,b.peak].join(','))];
+      downloadFile(`${rep.period}_report_${new Date(rep.from).toISOString().slice(0,10)}.csv`,L.join('\n'));toast('Report CSV downloaded')},
+    'rp-print':()=>{if(!rep)return;
+      $('#print-root').innerHTML=`<div class="pr"><h2>${esc(S().campusName)} — ${rep.label} Energy Report</h2>
+        <div style="font-size:12px">${fmtD(rep.from)} → ${fmtD(rep.to-1)} · tariff ${S().currency}${nf(rep.rate,3)}/kWh</div>
+        <p style="font-size:12.5px">Campus total: <b>${nf(rep.campus.kwh)} kWh</b> · cost ${S().currency}${nf(rep.campus.cost)} · peak ${nf(rep.campus.peak,1)} kW · ${rep.campus.windows} h above ${nf(S().peakThreshold)} kW threshold</p>
+        <table><tr><th>Building</th><th>Type</th><th>kWh</th><th>Share %</th><th>Cost</th><th>Peak kW</th></tr>
+        ${rep.buildings.map(b=>`<tr><td>${esc(b.name)}</td><td>${esc(b.type)}</td><td>${nf(b.kwh)}</td><td>${nf(b.share,1)}</td><td>${S().currency}${nf(b.cost,2)}</td><td>${nf(b.peak,1)}</td></tr>`).join('')}</table>
+        <div class="pr-note">Generated ${fmtDT(Date.now())} by CampusGrid. Figures derive from stored readings; costs exclude demand charges. Sample data if seeded as such.</div></div>`;
+      window.print()},
+    'cf-save':async()=>{
+      $$('#rep-body .field').forEach(f=>f.classList.remove('bad'));
+      const r=await api.request('PUT','/settings',{body:{peakThreshold:$('#cf-th').value,rate:$('#cf-rate').value,demandRate:$('#cf-dem').value}});
+      if(!r.ok)return toast(r.error,'err');
+      toast('Threshold & tariff configuration saved');updateBell()},
+    'al-scan':async()=>{const r=await api.request('POST','/alerts/scan',{});
+      if(!r.ok)return toast(r.error,'err');
+      toast(r.data.created?`${r.data.created} new alert(s) created`:'No new alerts — everything already recorded');updateBell();loadAlerts()},
+    'al-readall':async()=>{await api.request('POST','/alerts/read-all');updateBell();loadAlerts()},
+    'al-read':async t=>{await api.request('PATCH','/alerts/'+t.dataset.id,{body:{read:true}});updateBell();loadAlerts()},
+    'al-del':async t=>{await api.request('DELETE','/alerts/'+t.dataset.id);updateBell();loadAlerts()},
+    'st-reset':async()=>{if(await confirmDlg({title:'Reset all data?',message:'Every record is deleted and the labelled sample dataset is reloaded.',okText:'Reset & reseed',danger:true})){await api.request('POST','/reset-sample');location.reload()}},
+  });
+};
+
+/* ================= router & boot (fully guarded — never blank) ================= */
+async function renderApp(){
+  const root=$('#page');
+  try{
+    CURRENT=parseHash();
+    renderChrome();
+  }catch(e){
+    console.error('Chrome init failed:',e);
+    CURRENT={path:'dashboard',query:{}};
+    try{renderChrome()}catch(e2){console.error(e2)}
+  }
+  root.innerHTML='';
+  root.appendChild(skeleton());
+  try{
+    const page=PAGES[CURRENT.path];
+    if(!page)throw new Error('Unknown route: '+CURRENT.path);
+    await page(root);
+  }catch(e){
+    console.error('Page render failed:',e);
+    errorState(root,e.message||'Unexpected error while loading this page.');
+  }
+}
+window.renderApp=renderApp;
+window.addEventListener('hashchange',renderApp);
+
+(async function boot(){
+  try{
+    const [rs, rb] = await Promise.all([
+      api.request('GET', '/settings'),
+      api.request('GET', '/buildings/all')
+    ]);
+    if (rs.ok && rs.data) DB.data.settings = rs.data;
+    if (rb.ok && Array.isArray(rb.data)) {
+      DB.data.buildings = rb.data;
+      DB.data.meta.sample = rb.data.some(b => b.sample);
+    }
+    applyTheme();
+    await renderApp();
+  }catch(e){
+    console.error('Boot render failed:', e);
+    if(window.__cgBootFail) window.__cgBootFail(e.message || 'Boot failed');
+  }
+  window.__CG_BOOTED=true; // watchdog: main script completed booting
+})();
+</script>
+<script>
+/* SAFETY NET 2: boot watchdog. If the main script never finished booting
+   (parse error, early crash, truncated file), paint a visible error into
+   #page instead of leaving it blank. */
+window.addEventListener('load',function(){
+  setTimeout(function(){
+    if(!window.__CG_BOOTED&&window.__cgBootFail){
+      window.__cgBootFail('The main application script did not finish booting. Open the browser console (F12) for the underlying error, then use “Reset data & reload”.');
+    }
+  },1200);
+});
+</script>
+</body>
+</html>
